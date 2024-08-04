@@ -19,7 +19,7 @@ pub async fn handle_order_subscribe(
     state: &AppState,
     tx: Sender<Message>,
 ) -> Result<JoinHandle<()>> {
-    let order_type = parse_order_type(&request.params)
+    let order_type = parse_order_type(request.params())
         .ok_or_else(|| anyhow::anyhow!("Invalid or missing order type"))?;
 
     let order = state
@@ -32,7 +32,7 @@ pub async fn handle_order_subscribe(
     let order_response = json!({
         "order": order_json,
     });
-    send_success_response(&tx, &request.method, json!(order_response)).await?;
+    send_success_response(&tx, request.method(), json!(order_response)).await?;
 
     let mut receiver = state
         .order_event_producer
@@ -41,7 +41,7 @@ pub async fn handle_order_subscribe(
 
     let handle = tokio::spawn(async move {
         while let Some(event) = receiver.recv().await {
-            if let Err(e) = send_success_response(&tx, &request.method, json!(event)).await {
+            if let Err(e) = send_success_response(&tx, request.method(), json!(event)).await {
                 error!("Failed to send order event: {:?}", e);
                 break;
             }
@@ -58,21 +58,21 @@ pub async fn handle_coin_subscribe(
     state: &AppState,
     tx: Sender<Message>,
 ) -> Result<JoinHandle<()>> {
-    let coin_id = parse_coin_id(&request.params)
+    let coin_id = parse_coin_id(request.params())
         .ok_or_else(|| anyhow::anyhow!("Invalid or missing coin ID"))?;
 
     let mut receiver = state.coin_event_producer.get_coin_receiver(&coin_id).await;
 
     send_success_response(
         &tx,
-        &request.method,
+        request.method(),
         json!({"status": "subscribed", "coin_id": coin_id}),
     )
     .await?;
 
     let handle = tokio::spawn(async move {
         while let Some(event) = receiver.recv().await {
-            if let Err(e) = send_success_response(&tx, &request.method, json!(event)).await {
+            if let Err(e) = send_success_response(&tx, request.method(), json!(event)).await {
                 error!("Failed to send coin event: {:?}", e);
                 break;
             }
@@ -84,7 +84,7 @@ pub async fn handle_coin_subscribe(
     Ok(handle)
 }
 
-fn parse_order_type(params: &Option<Value>) -> Option<OrderType> {
+fn parse_order_type(params: Option<&Value>) -> Option<OrderType> {
     match params {
         Some(Value::String(s)) => OrderType::from_str(s).ok(),
         Some(Value::Object(obj)) => obj
@@ -95,7 +95,7 @@ fn parse_order_type(params: &Option<Value>) -> Option<OrderType> {
     }
 }
 
-fn parse_coin_id(params: &Option<Value>) -> Option<String> {
+fn parse_coin_id(params: Option<&Value>) -> Option<String> {
     match params {
         Some(Value::String(s)) => Some(s.clone()),
         Some(Value::Object(obj)) => obj

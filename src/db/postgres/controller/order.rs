@@ -87,24 +87,57 @@ impl OrderController {
         })
     }
     async fn get_ordered_coins(&self, order_type: OrderType) -> Result<Vec<CoinWithScore>> {
-        let id_scores_query  = match order_type {
-            OrderType::CreationTime => 
-                "SELECT id, created_at::TEXT as score FROM coin ORDER BY created_at DESC LIMIT $1"
-            ,
-            OrderType::MarketCap => 
-                "SELECT coin_id as id, price::TEXT as score FROM curve ORDER BY price DESC LIMIT $1"   
-            ,
-            OrderType::ReplyCount => 
-                "SELECT coin_id as id, reply_count::TEXT as score FROM coin_reply_count ORDER BY reply_count DESC LIMIT $1"
-            ,
-            OrderType::LatestReply => 
-                "SELECT DISTINCT ON (coin_id) coin_id as id, created_at::TEXT as score FROM thread ORDER BY coin_id, created_at DESC LIMIT $1"
-            ,
-            OrderType::Bump => 
-                "SELECT DISTINCT ON (coin_id) coin_id as id, created_at::TEXT as score FROM swap ORDER BY coin_id, created_at DESC LIMIT $1"
-            ,
+        let id_scores_query = match order_type {
+            OrderType::CreationTime => {
+                r#"
+                SELECT id, created_at::TEXT as score 
+                FROM coin 
+                ORDER BY created_at
+                DESC
+                LIMIT $1
+                "#
+            }
+
+            OrderType::MarketCap => {
+                r#"
+                SELECT coin_id as id,price::TEXT as score 
+                FROM curve
+                ORDER BY price DESC
+                LIMIT $1
+                "#
+            }
+
+            OrderType::ReplyCount => {
+                r#"
+                SELECT coin_id as id,reply_count::TEXT as score 
+                FROM coin_reply_count
+                ORDER BY reply_count DESC
+                LIMIT $1
+                "#
+            }
+            OrderType::LatestReply => {
+                r#"
+                SELECT DISTINCT ON (coin_id) coin_id as id, created_at::TEXT as score 
+                FROM thread
+                ORDER BY coin_id,created_at DESC 
+                LIMIT $1
+                "#
+            }
+            OrderType::Bump => {
+                r#"
+                SELECT DISTINCT ON (coin_id) coin_id as id, created_at::TEXT as score 
+                FROM swap ORDER BY coin_id, created_at DESC 
+                LIMIT $1
+                "#
+            }
         };
-        let coin_responses_query =  "SELECT c.id, c.name, c.symbol, c.image_uri, c.description,c.created_at, COALESCE(crc.reply_count::TEXT, '0') as reply_count, COALESCE(cu.price::TEXT, '0') as price, json_build_object('nickname', a.nickname, 'image_uri', a.image_uri) as creator FROM coin c LEFT JOIN account a ON c.creator = a.id LEFT JOIN coin_reply_count crc ON c.id = crc.coin_id LEFT JOIN curve cu ON c.id = cu.coin_id WHERE c.id = ANY($1)";
+        let coin_responses_query = r#"
+        SELECT c.id, c.name, c.symbol, c.image_uri, c.description,c.created_at, COALESCE(crc.reply_count::TEXT, '0') as reply_count, COALESCE(cu.price::TEXT, '0') as price, json_build_object('nickname', a.nickname, 'image_uri', a.image_uri) as creator
+        FROM coin c
+        LEFT JOIN account a ON c.creator = a.id 
+        LEFT JOIN coin_reply_count crc ON c.id = crc.coin_id
+        LEFT JOIN curve cu ON c.id = cu.coin_id 
+        WHERE c.id = ANY($1)"#;
         let id_scores: Vec<IdScore> = sqlx::query_as(id_scores_query)
             .bind(ORDER_LIMIT)
             .fetch_all(&self.db.pool)
@@ -137,7 +170,7 @@ impl OrderController {
                         reply_count: coin_raw.reply_count.clone().unwrap_or_default(),
                         price: coin_raw.price.clone().unwrap_or_default(),
                         creator,
-                        created_at: coin_raw.created_at.clone().unwrap_or_default()
+                        created_at: coin_raw.created_at.clone().unwrap_or_default(),
                     },
                     score: id_score.score.unwrap_or_default(),
                 })

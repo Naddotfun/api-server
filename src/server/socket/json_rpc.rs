@@ -7,13 +7,28 @@ use tokio::sync::mpsc::Sender;
 pub struct JsonRpcRequest {
     #[serde(default = "default_jsonrpc")]
     jsonrpc: String,
-    pub method: JsonRpcMethod,
-    pub params: Option<Value>,
+    method: JsonRpcMethod,
+    params: Option<Value>,
     id: u8,
 }
-
+impl JsonRpcRequest {
+    pub fn method(&self) -> &JsonRpcMethod {
+        &self.method
+    }
+    pub fn params(&self) -> Option<&Value> {
+        self.params.as_ref()
+    }
+}
 fn default_jsonrpc() -> String {
     "2.0".to_string()
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum JsonRpcMethod {
+    OrderSubscribe,
+    CoinSubscribe,
+    // 다른 메서드들을 여기에 추가할 수 있습니다.
 }
 
 #[derive(Serialize)]
@@ -97,12 +112,4 @@ pub async fn send_response(tx: &Sender<Message>, response: JsonRpcResponse) -> R
     tx.send(Message::Text(serde_json::to_string(&response)?))
         .await
         .context("Failed to send response")
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum JsonRpcMethod {
-    OrderSubscribe,
-    CoinSubscribe,
-    // 다른 메서드들을 여기에 추가할 수 있습니다.
 }

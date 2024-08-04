@@ -87,7 +87,7 @@ async fn handle_message(
                 serde_json::from_str(&text).context("Failed to parse JSON-RPC request")?;
             //request 를 method 로 바꿔보자.
 
-            match request.method {
+            match request.method() {
                 JsonRpcMethod::OrderSubscribe => {
                     // Cancel any existing subscription
                     if let ActiveSubscription::Order(handle) | ActiveSubscription::Coin(handle) =
