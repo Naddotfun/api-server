@@ -23,7 +23,7 @@ pub enum OrderType {
     Bump,
     #[serde(rename = "reply_count")]
     ReplyCount,
-    #[serde(rename = "lastest_reply")]
+    #[serde(rename = "latest_reply")]
     LatestReply,
 }
 
