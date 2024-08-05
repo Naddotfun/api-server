@@ -46,7 +46,8 @@ pub async fn main(
         coin_event_producer,
     };
     let app = Router::new()
-        .route("/wss", get(ws_handler))
+        .route("/", get(|| async { "Hello, World!" }))
+        .route("/ws", get(ws_handler))
         .with_state(state);
 
     let addr = SocketAddr::from((
