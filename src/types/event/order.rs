@@ -1,9 +1,9 @@
 use std::str::FromStr;
 
+use super::{NewSwapMessage, NewTokenMessage, SendMessageType};
+use crate::types::model::{Coin, CoinReplyCount, Curve, Swap};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-
-use crate::types::model::{Coin, CoinReplyCount, Curve, Swap};
 use sqlx::FromRow;
 #[derive(Debug, Clone, Serialize)]
 pub enum OrderEvent {
@@ -43,38 +43,23 @@ impl FromStr for OrderType {
 }
 
 impl OrderType {}
-use super::SendMessageType;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct OrderMessage {
     pub message_type: SendMessageType,
-    pub new_token: Option<CreateCoinMessage>,
-    pub new_swap: Option<CreateSwapMesage>,
+    pub new_token: Option<NewTokenMessage>,
+    pub new_swap: Option<NewSwapMessage>,
     pub order_type: OrderType,
     pub order_token: Option<Vec<OrderTokenResponse>>,
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct CreateCoinMessage {
-    pub creator: User,
-    pub symbol: String,
-    pub image_uri: String,
-    pub created_at: i64,
-}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     pub nickname: String,
     pub image_uri: String,
 }
-#[derive(Debug, Clone, Serialize)]
-pub struct CreateSwapMesage {
-    pub trader_info: User,
-    pub coin_info: CreateSwapCoinInfo,
-    pub is_buy: bool,
-    pub nad_amount: String,
-}
 
-#[derive(Debug, Clone, Serialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct CreateSwapCoinInfo {
     pub symbol: String,
     pub image_uri: String,

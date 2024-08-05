@@ -18,12 +18,9 @@ use crate::{
     },
     types::{
         event::{
-            order::{
-                CreateCoinMessage, CreateSwapCoinInfo, CreateSwapMesage, OrderEvent, OrderMessage,
-                OrderTokenResponse, OrderType,
-            },
+            order::{CreateSwapCoinInfo, OrderEvent, OrderMessage, OrderTokenResponse, OrderType},
             wrapper::{CoinWrapper, CurveWrapper, ReplyCountWrapper, SwapWrapper},
-            SendMessageType,
+            NewSwapMessage, NewTokenMessage, SendMessageType,
         },
         model::{Coin, CoinReplyCount, Curve, Swap},
     },
@@ -219,13 +216,14 @@ impl OrderEventProducer {
         coin: Coin,
     ) -> Result<Option<OrderTokenResponse>> {
         let order_controller = OrderController::new(db);
-        let coin = order_controller.get_order_token_response(&coin.id).await?;
+        let order_repsonse = order_controller.get_order_token_response(&coin.id).await?;
         let result = self
             .redis
-            .add_to_creation_time_order(&coin, coin.created_at.to_string())
+            .add_to_creation_time_order(&order_repsonse, coin.created_at.to_string())
             .await
             .context("Add_to_creation_time_order fail")?;
-        Ok(if result { Some(coin) } else { None })
+
+        Ok(if result { Some(order_repsonse) } else { None })
     }
 
     async fn add_bump_order(
@@ -234,16 +232,16 @@ impl OrderEventProducer {
         swap: Swap,
     ) -> Result<Option<OrderTokenResponse>> {
         let order_controller = OrderController::new(db);
-        let coin = order_controller
+        let order_repsonse = order_controller
             .get_order_token_response(&swap.coin_id)
             .await?;
         let result = self
             .redis
-            .add_to_bump_order(&coin, swap.created_at.to_string())
+            .add_to_bump_order(&order_repsonse, swap.created_at.to_string())
             .await
             .context("Add_to_bump_order fail")?;
 
-        Ok(if result { Some(coin) } else { None })
+        Ok(if result { Some(order_repsonse) } else { None })
     }
     async fn add_market_cap_order(
         &self,
@@ -252,12 +250,15 @@ impl OrderEventProducer {
     ) -> Result<Option<OrderTokenResponse>> {
         // let coin = coin_controller.get_coin_by_id(&curve.coin_id).await?;
         let order_controller = OrderController::new(db);
-        let coin = order_controller
+        let order_repsonse = order_controller
             .get_order_token_response(&curve.coin_id)
             .await?;
         let score = curve.price.to_string();
-        let result = self.redis.add_to_market_cap_order(&coin, score).await?;
-        Ok(if result { Some(coin) } else { None })
+        let result = self
+            .redis
+            .add_to_market_cap_order(&order_repsonse, score)
+            .await?;
+        Ok(if result { Some(order_repsonse) } else { None })
     }
 
     async fn add_coin_last_reply_order(
@@ -266,15 +267,15 @@ impl OrderEventProducer {
         coin_reply: CoinReplyCount,
     ) -> Result<Option<OrderTokenResponse>> {
         let order_controller = OrderController::new(db);
-        let coin = order_controller
+        let order_repsonse = order_controller
             .get_order_token_response(&coin_reply.coin_id)
             .await?;
         let score = Utc::now().timestamp();
         let result = self
             .redis
-            .add_to_last_reply_order(&coin, score.to_string())
+            .add_to_last_reply_order(&order_repsonse, score.to_string())
             .await?;
-        Ok(if result { Some(coin) } else { None })
+        Ok(if result { Some(order_repsonse) } else { None })
     }
     async fn add_coin_reply_count_order(
         &self,
@@ -318,7 +319,7 @@ impl OrderEventProducer {
     }
 
     async fn handle_creation_time_order(&self, coin: Coin) -> Result<Vec<OrderMessage>> {
-        let coin = self
+        let order_token_response = self
             .add_creation_time_order(self.db.clone(), coin)
             .await
             .context("Fail add_bump_order")?
@@ -328,18 +329,19 @@ impl OrderEventProducer {
                 )
             })?;
 
-        let creator = coin.creator.clone();
+        let new_token = NewTokenMessage::new(&order_token_response);
+
+        self.redis
+            .set_new_token(&new_token)
+            .await
+            .context("Failed Set New Token")?;
+
         let message = OrderMessage {
             message_type: SendMessageType::ALL,
-            new_token: Some(CreateCoinMessage {
-                creator,
-                symbol: coin.symbol.clone(),
-                image_uri: coin.image_uri.clone(),
-                created_at: coin.created_at,
-            }),
+            new_token: Some(new_token),
             new_swap: None,
             order_type: OrderType::CreationTime,
-            order_token: Some(vec![coin]),
+            order_token: Some(vec![order_token_response]),
         };
         Ok(vec![message])
     }
@@ -348,7 +350,7 @@ impl OrderEventProducer {
         info!("handle_bump_order swap {:?}", swap);
 
         //timestamp 때문에 그렇나?
-        let coin = self
+        let order_token_response = self
             .add_bump_order(self.db.clone(), swap.clone())
             .await
             .context("Fail add_bump_order")?
@@ -356,27 +358,17 @@ impl OrderEventProducer {
                 anyhow::anyhow!("Failed to add coin, which should never happen for bump order")
             })?;
 
-        info!("handle_bump_order coin {:?}", coin);
+        info!("handle_bump_order coin {:?}", order_token_response);
         let message_controller = MessageController::new(self.db.clone());
-        let trader = message_controller.get_user(&swap.sender).await?;
-        info!("trader  {:?}", trader);
-        let coin_info = CreateSwapCoinInfo {
-            symbol: coin.symbol.clone(),
-            image_uri: coin.image_uri.clone(),
-        };
+        let trader_info = message_controller.get_user(&swap.sender).await?;
 
-        let create_swap_message = CreateSwapMesage {
-            trader_info: trader,
-            is_buy: swap.is_buy,
-            nad_amount: swap.nad_amount.to_string(),
-            coin_info,
-        };
+        let new_swap_message = NewSwapMessage::new(&order_token_response, trader_info, &swap);
         let message = OrderMessage {
             message_type: SendMessageType::ALL,
             new_token: None,
-            new_swap: Some(create_swap_message),
+            new_swap: Some(new_swap_message),
             order_type: OrderType::Bump,
-            order_token: Some(vec![coin.clone()]),
+            order_token: Some(vec![order_token_response.clone()]),
         };
         Ok(vec![message])
     }

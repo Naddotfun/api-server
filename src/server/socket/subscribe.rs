@@ -8,8 +8,13 @@ use serde_json::Value;
 use tokio::{sync::mpsc::Sender, task::JoinHandle};
 use tracing::error;
 
+use crate::db::postgres::controller::coinpage::CoinPageController;
+use crate::db::postgres::controller::message;
 use crate::server::state::AppState;
+use crate::types::event::coin_message::CoinMessage;
+use crate::types::event::order::OrderMessage;
 use crate::types::event::order::OrderType;
+use crate::types::event::SendMessageType;
 
 use super::json_rpc::send_success_response;
 use super::json_rpc::JsonRpcRequest;
@@ -27,12 +32,29 @@ pub async fn handle_order_subscribe(
         .get_order(order_type)
         .await
         .context("Failed to get initial order")?;
-    let order_json = serde_json::to_value(order).context("Failed to serialize order")?;
 
-    let order_response = json!({
-        "order": order_json,
-    });
-    send_success_response(&tx, request.method(), json!(order_response)).await?;
+    let new_token = state
+        .redis
+        .get_new_token()
+        .await
+        .context("Failed to get new token")?;
+    let new_swap = state
+        .redis
+        .get_new_swap()
+        .await
+        .context("Failed to get new_swap")?;
+
+    let message = OrderMessage {
+        message_type: SendMessageType::ALL,
+        new_token,
+        new_swap,
+        order_type,
+        order_token: Some(order),
+    };
+
+    let order_json = serde_json::to_value(message).context("Failed to serialize order")?;
+
+    send_success_response(&tx, request.method(), json!(order_json)).await?;
 
     let mut receiver = state
         .order_event_producer
@@ -63,10 +85,34 @@ pub async fn handle_coin_subscribe(
 
     let mut receiver = state.coin_event_producer.get_coin_receiver(&coin_id).await;
 
+    //이제 여기서 부터 coin 에 대한 데이터를 가지고 와서 보내주는 코드 작성해야함.
+
+    //먼저 레디스에 접근해서 coin_id 에 해당하는 coin 정보 가져옴.
+    //없으면 postgres 에서 가져와서 redis 에 저장함.
+
+    let new_token = state
+        .redis
+        .get_new_token()
+        .await
+        .context("Failed to get new token")?;
+    let new_swap = state
+        .redis
+        .get_new_swap()
+        .await
+        .context("Failed to get new_swap")?;
+    let coin_page_controller = CoinPageController::new(state.postgres.clone());
+    let coin_data = coin_page_controller.get_coin_message(&coin_id).await?;
+    let message = CoinMessage {
+        message_type: SendMessageType::ALL,
+        new_token,
+        new_swap,
+        coin: coin_data,
+    };
+    let message_json = serde_json::to_value(message).context("Failed to serialize coin")?;
     send_success_response(
         &tx,
         request.method(),
-        json!({"status": "subscribed", "coin_id": coin_id}),
+        json!({"status": "subscribed","data": message_json}),
     )
     .await?;
 

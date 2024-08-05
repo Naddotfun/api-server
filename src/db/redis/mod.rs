@@ -1,5 +1,8 @@
 use crate::types::{
-    event::order::{OrderTokenResponse, OrderType},
+    event::{
+        order::{OrderTokenResponse, OrderType},
+        NewSwapMessage, NewTokenMessage,
+    },
     model::Coin,
 };
 use anyhow::{Context, Result};
@@ -7,7 +10,7 @@ use axum_extra::handler::Or;
 use chrono::Utc;
 use futures::future::try_join_all;
 use lazy_static::lazy_static;
-use redis::{AsyncCommands, Client};
+use redis::{AsyncCommands, Client, Commands};
 use serde_json::{from_str, Value};
 use tracing::{error, info, warn};
 
@@ -18,6 +21,8 @@ lazy_static! {
     static ref REPLY_COUNT_ORDER_KEY: &'static str = "reply_count_order";
     static ref MARKET_CAP_ORDER_KEY: &'static str = "market_cap_order";
     static ref CREATION_TIME_ORDER_KEY: &'static str = "creation_time_order";
+    static ref NEW_TOKEN_KEY: &'static str = "new_token";
+    static ref NEW_SWAP_KEY: &'static str = "new_swap";
 }
 pub struct RedisDatabase {
     pub client: Client,
@@ -247,5 +252,57 @@ impl RedisDatabase {
     pub async fn set_market_cap_order(&self, coins_with_score: Vec<CoinWithScore>) -> Result<()> {
         self.set_coins_to_queue(*MARKET_CAP_ORDER_KEY, coins_with_score)
             .await
+    }
+
+    pub async fn set_new_token(&self, new_coin: &NewTokenMessage) -> Result<(), redis::RedisError> {
+        let mut conn = self.client.get_multiplexed_async_connection().await?;
+        let value = serde_json::to_string(new_coin).map_err(|e| {
+            redis::RedisError::from((
+                redis::ErrorKind::IoError,
+                "Serialization error",
+                e.to_string(),
+            ))
+        })?;
+
+        conn.set::<_, _, ()>(*NEW_TOKEN_KEY, value).await?;
+        Ok(())
+    }
+
+    pub async fn get_new_token(&self) -> Result<Option<NewTokenMessage>> {
+        let mut conn = self.client.get_multiplexed_async_connection().await?;
+        let value: Option<String> = conn.get(*NEW_TOKEN_KEY).await?;
+        match value {
+            Some(v) => {
+                let new_token = serde_json::from_str(&v).context("Failed to parse new token")?;
+                Ok(Some(new_token))
+            }
+            None => Ok(None),
+        }
+    }
+
+    pub async fn set_new_swap(&self, new_swap: &NewSwapMessage) -> Result<(), redis::RedisError> {
+        let mut conn = self.client.get_multiplexed_async_connection().await?;
+        let value = serde_json::to_string(new_swap).map_err(|e| {
+            redis::RedisError::from((
+                redis::ErrorKind::IoError,
+                "Serialization error",
+                e.to_string(),
+            ))
+        })?;
+
+        conn.set::<_, _, ()>(*NEW_SWAP_KEY, value).await?;
+        Ok(())
+    }
+
+    pub async fn get_new_swap(&self) -> Result<Option<NewSwapMessage>> {
+        let mut conn = self.client.get_multiplexed_async_connection().await?;
+        let value: Option<String> = conn.get(*NEW_SWAP_KEY).await?;
+        match value {
+            Some(v) => {
+                let new_swap = serde_json::from_str(&v).context("Failed to parse new swap")?;
+                Ok(Some(new_swap))
+            }
+            None => Ok(None),
+        }
     }
 }

@@ -1,3 +1,4 @@
+pub mod routes;
 pub mod socket;
 pub mod state;
 use std::{

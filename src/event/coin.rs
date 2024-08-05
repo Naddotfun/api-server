@@ -6,8 +6,7 @@ use crate::{
     },
     types::{
         event::{
-            coin::CoinMessage,
-            order::{CreateCoinMessage, CreateSwapCoinInfo, CreateSwapMesage, User},
+            coin_message::CoinMessage,
             wrapper::{
                 BalanceWrapper, ChartWrapper, CoinWrapper, CurveWrapper, SwapWrapper, ThreadWrapper,
             },
@@ -152,7 +151,7 @@ impl CoinEventProducer {
                         }
                         SendMessageType::Regular => {
                             // Send only to subscribers of this coin
-                            if let Some(sender) = senders.get(&message.coin_id) {
+                            if let Some(sender) = senders.get(&message.coin.id) {
                                 let _ = sender.0.send(message);
                             }
                         }
