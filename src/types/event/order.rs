@@ -51,7 +51,7 @@ pub struct OrderMessage {
     pub new_token: Option<CreateCoinMessage>,
     pub new_swap: Option<CreateSwapMesage>,
     pub order_type: OrderType,
-    pub order_coin: Option<Vec<OrderCoinResponse>>,
+    pub order_token: Option<Vec<OrderTokenResponse>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -80,7 +80,7 @@ pub struct CreateSwapCoinInfo {
     pub image_uri: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct OrderCoinResponse {
+pub struct OrderTokenResponse {
     pub id: String,          //coin.id
     pub creator: User,       //coin 의 creator -> account table -> select nickname, image uri
     pub name: String,        // coin.name

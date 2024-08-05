@@ -19,8 +19,8 @@ use crate::{
     types::{
         event::{
             order::{
-                CreateCoinMessage, CreateSwapCoinInfo, CreateSwapMesage, OrderCoinResponse,
-                OrderEvent, OrderMessage, OrderType,
+                CreateCoinMessage, CreateSwapCoinInfo, CreateSwapMesage, OrderEvent, OrderMessage,
+                OrderTokenResponse, OrderType,
             },
             wrapper::{CoinWrapper, CurveWrapper, ReplyCountWrapper, SwapWrapper},
             SendMessageType,
@@ -129,11 +129,11 @@ impl OrderEventProducer {
         order_type: OrderType,
     ) -> Result<()> {
         let coins = match order_type {
-            OrderType::CreationTime => controller.get_creation_time_order_coin().await?,
-            OrderType::MarketCap => controller.get_market_cap_order_coin().await?,
-            OrderType::Bump => controller.get_bump_order_coin().await?,
-            OrderType::ReplyCount => controller.get_reply_count_order_coin().await?,
-            OrderType::LatestReply => controller.get_latest_reply_order_coin().await?,
+            OrderType::CreationTime => controller.get_creation_time_order_token().await?,
+            OrderType::MarketCap => controller.get_market_cap_order_token().await?,
+            OrderType::Bump => controller.get_bump_order_token().await?,
+            OrderType::ReplyCount => controller.get_reply_count_order_token().await?,
+            OrderType::LatestReply => controller.get_latest_reply_order_token().await?,
         };
         // info!("Fetched coins for {:?}", coins);
         match order_type {
@@ -217,9 +217,9 @@ impl OrderEventProducer {
         &self,
         db: Arc<PostgresDatabase>,
         coin: Coin,
-    ) -> Result<Option<OrderCoinResponse>> {
+    ) -> Result<Option<OrderTokenResponse>> {
         let order_controller = OrderController::new(db);
-        let coin = order_controller.get_order_coin_response(&coin.id).await?;
+        let coin = order_controller.get_order_token_response(&coin.id).await?;
         let result = self
             .redis
             .add_to_creation_time_order(&coin, coin.created_at.to_string())
@@ -232,10 +232,10 @@ impl OrderEventProducer {
         &self,
         db: Arc<PostgresDatabase>,
         swap: Swap,
-    ) -> Result<Option<OrderCoinResponse>> {
+    ) -> Result<Option<OrderTokenResponse>> {
         let order_controller = OrderController::new(db);
         let coin = order_controller
-            .get_order_coin_response(&swap.coin_id)
+            .get_order_token_response(&swap.coin_id)
             .await?;
         let result = self
             .redis
@@ -249,11 +249,11 @@ impl OrderEventProducer {
         &self,
         db: Arc<PostgresDatabase>,
         curve: Curve,
-    ) -> Result<Option<OrderCoinResponse>> {
+    ) -> Result<Option<OrderTokenResponse>> {
         // let coin = coin_controller.get_coin_by_id(&curve.coin_id).await?;
         let order_controller = OrderController::new(db);
         let coin = order_controller
-            .get_order_coin_response(&curve.coin_id)
+            .get_order_token_response(&curve.coin_id)
             .await?;
         let score = curve.price.to_string();
         let result = self.redis.add_to_market_cap_order(&coin, score).await?;
@@ -264,10 +264,10 @@ impl OrderEventProducer {
         &self,
         db: Arc<PostgresDatabase>,
         coin_reply: CoinReplyCount,
-    ) -> Result<Option<OrderCoinResponse>> {
+    ) -> Result<Option<OrderTokenResponse>> {
         let order_controller = OrderController::new(db);
         let coin = order_controller
-            .get_order_coin_response(&coin_reply.coin_id)
+            .get_order_token_response(&coin_reply.coin_id)
             .await?;
         let score = Utc::now().timestamp();
         let result = self
@@ -280,10 +280,10 @@ impl OrderEventProducer {
         &self,
         db: Arc<PostgresDatabase>,
         coin_reply: CoinReplyCount,
-    ) -> Result<Option<OrderCoinResponse>> {
+    ) -> Result<Option<OrderTokenResponse>> {
         let order_controller = OrderController::new(db);
         let coin = order_controller
-            .get_order_coin_response(&coin_reply.coin_id)
+            .get_order_token_response(&coin_reply.coin_id)
             .await?;
         let result = self
             .redis
@@ -339,7 +339,7 @@ impl OrderEventProducer {
             }),
             new_swap: None,
             order_type: OrderType::CreationTime,
-            order_coin: Some(vec![coin]),
+            order_token: Some(vec![coin]),
         };
         Ok(vec![message])
     }
@@ -376,7 +376,7 @@ impl OrderEventProducer {
             new_token: None,
             new_swap: Some(create_swap_message),
             order_type: OrderType::Bump,
-            order_coin: Some(vec![coin.clone()]),
+            order_token: Some(vec![coin.clone()]),
         };
         Ok(vec![message])
     }
@@ -393,7 +393,7 @@ impl OrderEventProducer {
                     new_token: None,
                     new_swap: None,
                     order_type: OrderType::MarketCap,
-                    order_coin: Some(vec![coin]),
+                    order_token: Some(vec![coin]),
                 };
                 Ok(vec![message])
             }
@@ -420,7 +420,7 @@ impl OrderEventProducer {
                 new_token: None,
                 new_swap: None,
                 order_type: OrderType::LatestReply,
-                order_coin: Some(vec![last_reply_coin]),
+                order_token: Some(vec![last_reply_coin]),
             });
         }
 
@@ -430,7 +430,7 @@ impl OrderEventProducer {
                 new_token: None,
                 new_swap: None,
                 order_type: OrderType::ReplyCount,
-                order_coin: Some(vec![reply_count_coin]),
+                order_token: Some(vec![reply_count_coin]),
             });
         }
 

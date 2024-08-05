@@ -1,5 +1,5 @@
 use crate::types::{
-    event::order::{OrderCoinResponse, OrderType},
+    event::order::{OrderTokenResponse, OrderType},
     model::Coin,
 };
 use anyhow::{Context, Result};
@@ -40,7 +40,7 @@ impl RedisDatabase {
     async fn add_coin_to_queue(
         &self,
         key: &str,
-        coin: &OrderCoinResponse,
+        coin: &OrderTokenResponse,
         score: String,
     ) -> Result<bool> {
         let mut conn = self.client.get_multiplexed_async_connection().await?;
@@ -86,13 +86,17 @@ impl RedisDatabase {
             Ok(false)
         }
     }
-    pub async fn add_to_bump_order(&self, coin: &OrderCoinResponse, score: String) -> Result<bool> {
+    pub async fn add_to_bump_order(
+        &self,
+        coin: &OrderTokenResponse,
+        score: String,
+    ) -> Result<bool> {
         self.add_coin_to_queue(*BUMP_ORDER_KEY, coin, score).await
     }
 
     pub async fn add_to_last_reply_order(
         &self,
-        coin: &OrderCoinResponse,
+        coin: &OrderTokenResponse,
         score: String,
     ) -> Result<bool> {
         self.add_coin_to_queue(*LAST_REPLY_ORDER_KEY, coin, score)
@@ -101,7 +105,7 @@ impl RedisDatabase {
 
     pub async fn add_to_reply_count_order(
         &self,
-        coin: &OrderCoinResponse,
+        coin: &OrderTokenResponse,
         score: String,
     ) -> Result<bool> {
         self.add_coin_to_queue(*REPLY_COUNT_ORDER_KEY, coin, score)
@@ -110,7 +114,7 @@ impl RedisDatabase {
 
     pub async fn add_to_market_cap_order(
         &self,
-        coin: &OrderCoinResponse,
+        coin: &OrderTokenResponse,
         score: String,
     ) -> Result<bool> {
         self.add_coin_to_queue(*MARKET_CAP_ORDER_KEY, coin, score)
@@ -119,14 +123,14 @@ impl RedisDatabase {
 
     pub async fn add_to_creation_time_order(
         &self,
-        coin: &OrderCoinResponse,
+        coin: &OrderTokenResponse,
         score: String,
     ) -> Result<bool> {
         self.add_coin_to_queue(*CREATION_TIME_ORDER_KEY, coin, score)
             .await
     }
 
-    async fn get_coins_from_queue(&self, key: &str) -> Result<Vec<OrderCoinResponse>> {
+    async fn get_coins_from_queue(&self, key: &str) -> Result<Vec<OrderTokenResponse>> {
         let mut conn = self.client.get_multiplexed_async_connection().await?;
 
         // ZREVRANGE를 사용하여 모든 항목을 한 번에 가져옵니다 (최대 50개).
@@ -148,14 +152,14 @@ impl RedisDatabase {
         let results = try_join_all(parsed_coins_futures).await?;
 
         // 성공적으로 파싱된 코인만 수집
-        let coins: Vec<OrderCoinResponse> = results
+        let coins: Vec<OrderTokenResponse> = results
             .into_iter()
             .filter_map(|result| result.ok())
             .collect();
 
         Ok(coins)
     }
-    pub async fn get_order(&self, order_type: OrderType) -> Result<Vec<OrderCoinResponse>> {
+    pub async fn get_order(&self, order_type: OrderType) -> Result<Vec<OrderTokenResponse>> {
         use OrderType::*;
         match order_type {
             CreationTime => self.get_creation_time_order().await,
@@ -166,23 +170,23 @@ impl RedisDatabase {
         }
     }
     // 각 순서별로 모든 코인 가져오기
-    pub async fn get_bump_order(&self) -> Result<Vec<OrderCoinResponse>> {
+    pub async fn get_bump_order(&self) -> Result<Vec<OrderTokenResponse>> {
         self.get_coins_from_queue(*BUMP_ORDER_KEY).await
     }
 
-    pub async fn get_last_reply_order(&self) -> Result<Vec<OrderCoinResponse>> {
+    pub async fn get_last_reply_order(&self) -> Result<Vec<OrderTokenResponse>> {
         self.get_coins_from_queue(*LAST_REPLY_ORDER_KEY).await
     }
 
-    pub async fn get_reply_count_order(&self) -> Result<Vec<OrderCoinResponse>> {
+    pub async fn get_reply_count_order(&self) -> Result<Vec<OrderTokenResponse>> {
         self.get_coins_from_queue(*REPLY_COUNT_ORDER_KEY).await
     }
 
-    pub async fn get_market_cap_order(&self) -> Result<Vec<OrderCoinResponse>> {
+    pub async fn get_market_cap_order(&self) -> Result<Vec<OrderTokenResponse>> {
         self.get_coins_from_queue(*MARKET_CAP_ORDER_KEY).await
     }
 
-    pub async fn get_creation_time_order(&self) -> Result<Vec<OrderCoinResponse>> {
+    pub async fn get_creation_time_order(&self) -> Result<Vec<OrderTokenResponse>> {
         self.get_coins_from_queue(*CREATION_TIME_ORDER_KEY).await
     }
 
