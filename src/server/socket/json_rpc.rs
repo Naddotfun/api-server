@@ -3,6 +3,7 @@ use axum::extract::ws::Message;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::mpsc::Sender;
+use tracing::info;
 #[derive(Deserialize)]
 pub struct JsonRpcRequest {
     #[serde(default = "default_jsonrpc")]
@@ -31,7 +32,7 @@ pub enum JsonRpcMethod {
     // 다른 메서드들을 여기에 추가할 수 있습니다.
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(untagged)]
 pub enum JsonRpcResponse {
     Success {
@@ -45,7 +46,7 @@ pub enum JsonRpcResponse {
     },
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct JsonRpcError {
     code: JsonRpcErrorCode,
     message: String,
@@ -90,6 +91,7 @@ pub async fn send_success_response(
         method: method.to_owned(),
         result: Some(result),
     };
+    info!("Sending response: {:?}", response);
     send_response(tx, response).await
 }
 
