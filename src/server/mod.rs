@@ -7,17 +7,20 @@ use std::{
     ops::ControlFlow,
     str::FromStr,
     sync::Arc,
+    time::Duration,
 };
 
 use anyhow::Result;
 use axum::{
+    error_handling::HandleErrorLayer,
     extract::{
         ws::{CloseFrame, Message, WebSocket},
         ConnectInfo, State, WebSocketUpgrade,
     },
+    http::{Method, StatusCode, Uri},
     response::IntoResponse,
     routing::get,
-    Router,
+    BoxError, Router,
 };
 use axum_extra::{headers, TypedHeader};
 use futures::{SinkExt, StreamExt};
@@ -49,7 +52,13 @@ pub async fn main(
     let app = Router::new()
         .route("/", get(|| async { "Hello, World!" }))
         .route("/ws", get(ws_handler))
-        .with_state(state);
+        .layer(
+            ServiceBuilder::new()
+                .layer(HandleErrorLayer::new(handle_timeout_error))
+                .timeout(Duration::from_secs(5)),
+        )
+        .with_state(state)
+        .fallback(handler_404);
 
     let addr = SocketAddr::from((
         IpAddr::from_str(ip.as_str()).unwrap(),
@@ -82,4 +91,21 @@ async fn ws_handler(
     // finalize the upgrade process by returning upgrade callback.
     // we can customize the callback by sending additional info such as address.
     ws.on_upgrade(move |socket| handle_socket(socket, addr, state))
+}
+
+async fn handler_404() -> impl IntoResponse {
+    (StatusCode::NOT_FOUND, "nothing to see here")
+}
+
+async fn handle_timeout_error(
+    // `Method` and `Uri` are extractors so they can be used here
+    method: Method,
+    uri: Uri,
+    // the last argument must be the error itself
+    err: BoxError,
+) -> (StatusCode, String) {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        format!("`{method} {uri}` failed with {err}"),
+    )
 }
