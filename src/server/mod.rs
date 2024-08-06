@@ -28,6 +28,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use socket::handle_socket;
 use state::AppState;
+use tower::ServiceBuilder;
 use tracing::info;
 
 use crate::{
