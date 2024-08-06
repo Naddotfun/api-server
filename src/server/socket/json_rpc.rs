@@ -91,7 +91,7 @@ pub async fn send_success_response(
         method: method.to_owned(),
         result: Some(result),
     };
-    info!("Sending response: {:?}", response);
+    // info!("Sending response: {:?}", response);
     send_response(tx, response).await
 }
 

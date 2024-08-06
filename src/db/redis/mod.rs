@@ -263,7 +263,7 @@ impl RedisDatabase {
                 e.to_string(),
             ))
         })?;
-
+        info!("Setting new token: {:?}", value);
         conn.set::<_, _, ()>(*NEW_TOKEN_KEY, value).await?;
         Ok(())
     }
@@ -289,7 +289,7 @@ impl RedisDatabase {
                 e.to_string(),
             ))
         })?;
-
+        info!("Setting new swap: {:?}", value);
         conn.set::<_, _, ()>(*NEW_SWAP_KEY, value).await?;
         Ok(())
     }

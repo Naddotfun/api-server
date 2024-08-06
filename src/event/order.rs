@@ -18,7 +18,7 @@ use crate::{
     },
     types::{
         event::{
-            order::{CreateSwapCoinInfo, OrderEvent, OrderMessage, OrderTokenResponse, OrderType},
+            order::{OrderEvent, OrderMessage, OrderTokenResponse, OrderType},
             wrapper::{CoinWrapper, CurveWrapper, ReplyCountWrapper, SwapWrapper},
             NewSwapMessage, NewTokenMessage, SendMessageType,
         },
@@ -357,12 +357,15 @@ impl OrderEventProducer {
             .ok_or_else(|| {
                 anyhow::anyhow!("Failed to add coin, which should never happen for bump order")
             })?;
-
         info!("handle_bump_order coin {:?}", order_token_response);
         let message_controller = MessageController::new(self.db.clone());
         let trader_info = message_controller.get_user(&swap.sender).await?;
 
         let new_swap_message = NewSwapMessage::new(&order_token_response, trader_info, &swap);
+        self.redis
+            .set_new_swap(&new_swap_message)
+            .await
+            .context("Failed Set New Swap")?;
         let message = OrderMessage {
             message_type: SendMessageType::ALL,
             new_token: None,

@@ -7,6 +7,7 @@ use serde_json::json;
 use serde_json::Value;
 use tokio::{sync::mpsc::Sender, task::JoinHandle};
 use tracing::error;
+use tracing::info;
 
 use crate::db::postgres::controller::coinpage::CoinPageController;
 use crate::db::postgres::controller::message;
@@ -38,12 +39,13 @@ pub async fn handle_order_subscribe(
         .get_new_token()
         .await
         .context("Failed to get new token")?;
+    info!("new_token: {:?}", new_token);
     let new_swap = state
         .redis
         .get_new_swap()
         .await
         .context("Failed to get new_swap")?;
-
+    info!("new_token: {:?}", new_token);
     let message = OrderMessage {
         message_type: SendMessageType::ALL,
         new_token,
