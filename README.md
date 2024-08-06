@@ -1,6 +1,6 @@
-# Read Engine
+# Api-server
 
-Read Engine is a high-performance data processing system designed to efficiently handle real-time updates and ordering of cryptocurrency-related data. It's built with Rust for optimal speed and reliability.
+Nad.fun Api-server is a high-performance data processing system designed to efficiently handle real-time updates and ordering of cryptocurrency-related data. It's built with Rust for optimal speed and reliability.
 
 ## Features
 
@@ -17,12 +17,12 @@ For detailed usage, refer to the [API documentation](https://api-server.nad.fun/
 
 ## WebSocket RPC Interface
 
-Read Engine provides a WebSocket-based RPC interface for real-time data subscription and updates.
+Api-server provides a WebSocket-based RPC interface for real-time data subscription and updates.
 
 ### Connection
 
 To connect to the WebSocket server:
-ws://read-engine.nad.fun/ws
+wss://api-server.nad.fun/wss
 
 ### RPC Methods
 
@@ -105,7 +105,7 @@ Here's a simple JavaScript example using the WebSocket API:
 const ws = new WebSocket("ws://read-engine.nad.fun/ws");
 
 ws.onopen = () => {
-  console.log("Connected to Read Engine WebSocket");
+  console.log("Connected to Api-server WebSocket");
 
   // Subscribe to creation time order updates
   ws.send(
@@ -129,6 +129,6 @@ ws.onerror = (error) => {
 };
 
 ws.onclose = () => {
-  console.log("Disconnected from Read Engine WebSocket");
+  console.log("Disconnected from Api-server WebSocket");
 };
 ```
