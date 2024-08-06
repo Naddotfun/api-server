@@ -1,0 +1,21 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Pull, Build and Restart Service
+        run: |
+          cd /home/ubuntu/nads-pump/api-server
+          git pull origin main
+          cargo build --release
+          sudo systemctl restart api-server.service
