@@ -13,7 +13,7 @@ Read Engine is a high-performance data processing system designed to efficiently
 
 ## Rest API
 
-For detailed usage, refer to the [API documentation](https://read-engine.nad.fun/swagger-ui).
+For detailed usage, refer to the [API documentation](https://api-server.nad.fun/swagger-ui).
 
 ## WebSocket RPC Interface
 
