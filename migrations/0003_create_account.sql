@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS account (
     id VARCHAR(42) PRIMARY KEY,
     nickname VARCHAR(42) NOT NULL UNIQUE,
+    bio VARCHAR(255) NOT NULL DEFAULT '',
     image_uri VARCHAR NOT NULL,
     follower_count INT NOT NULL DEFAULT 0,
     following_count INT NOT NULL DEFAULT 0,
