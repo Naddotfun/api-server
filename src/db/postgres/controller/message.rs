@@ -5,10 +5,7 @@ use std::sync::Arc;
 use crate::{
     db::postgres::PostgresDatabase,
     types::{
-        event::{
-            order::{CreateSwapCoinInfo, User},
-            CoinAndUserInfo,
-        },
+        event::{order::CreateSwapCoinInfo, CoinAndUserInfo, User},
         model::{Account, Coin},
     },
 };
@@ -33,6 +30,7 @@ impl MessageController {
         .await?;
         Ok(creator)
     }
+
     pub async fn get_coin_info(&self, coin_id: &str) -> Result<CreateSwapCoinInfo> {
         let coin_info = sqlx::query_as!(
             CreateSwapCoinInfo,
@@ -44,6 +42,7 @@ impl MessageController {
 
         Ok(coin_info)
     }
+
     pub async fn get_coin_and_user_info(
         &self,
         coin_id: &str,

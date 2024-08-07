@@ -2,11 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::model::{Balance, Chart, Coin, Curve, Swap, Thread};
 
-use super::{
-    order::{CreateSwapCoinInfo, User},
-    CoinAndUserInfo, NewSwapMessage,
-};
-use super::{NewTokenMessage, SendMessageType};
+use super::{order::CreateSwapCoinInfo, CoinAndUserInfo, NewSwapMessage};
+use super::{NewTokenMessage, SendMessageType, User};
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct CoinResponse {

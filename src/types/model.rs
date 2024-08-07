@@ -61,6 +61,7 @@ pub struct Account {
     pub id: String,
     pub image_uri: String,
     pub nickname: String,
+    pub bio: String,
     pub follower_count: i32,
     pub following_count: i32,
     pub like_count: i32,
@@ -80,19 +81,29 @@ pub struct AccountSession {
     pub account_id: String, //account_id
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+#[derive(Debug, Clone, Deserialize, Serialize, sqlx::FromRow, ToSchema)]
 pub struct Thread {
+    #[serde(rename = "id")]
     pub id: i32,
+    #[serde(rename = "coinId")]
     pub coin_id: String,
+    #[serde(rename = "authorId")]
     pub author_id: String,
+    #[serde(rename = "content")]
     pub content: String,
+    #[serde(rename = "createdAt")]
     #[schema(value_type = String, example = "2023-06-01T12:00:00Z")]
     pub created_at: DateTime<Utc>,
+    #[serde(rename = "updatedAt")]
     #[schema(value_type = String, example = "2023-06-01T12:00:00Z")]
     pub updated_at: DateTime<Utc>,
+    #[serde(rename = "rootId")]
     pub root_id: Option<i32>,
+    #[serde(rename = "likesCount")]
     pub likes_count: i32,
+    #[serde(rename = "replyCount")]
     pub reply_count: i32,
+    #[serde(rename = "imageUri")]
     pub image_uri: Option<String>,
 }
 

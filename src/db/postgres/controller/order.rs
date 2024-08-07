@@ -6,7 +6,10 @@ use tracing::info;
 use crate::{
     db::postgres::PostgresDatabase,
     types::{
-        event::order::{OrderTokenResponse, OrderType, User},
+        event::{
+            order::{OrderTokenResponse, OrderType},
+            User,
+        },
         model::Coin,
     },
 };
@@ -43,7 +46,10 @@ impl OrderController {
     pub fn new(db: Arc<PostgresDatabase>) -> Self {
         OrderController { db }
     }
-    pub async fn get_order_token_response(&self, coin_id: &str) -> Result<OrderTokenResponse> {
+    pub async fn get_order_token_response_by_coin_id(
+        &self,
+        coin_id: &str,
+    ) -> Result<OrderTokenResponse> {
         let coin_response: OrderTokenResponseRaw = sqlx::query_as(
             r#"
             SELECT 
@@ -198,5 +204,68 @@ impl OrderController {
 
     pub async fn get_bump_order_token(&self) -> Result<Vec<CoinWithScore>> {
         self.get_ordered_tokens(OrderType::Bump).await
+    }
+
+    // TODO: 어떤 식으로 정렬할지
+    pub async fn search_order_tokens(&self, query: &str) -> Result<Vec<OrderTokenResponse>> {
+        let search_query = format!("%{}%", query.to_lowercase());
+
+        let coin_responses: Vec<OrderTokenResponseRaw> = sqlx::query_as(
+            r#"
+            SELECT 
+                c.id,
+                c.name,
+                c.symbol,
+                c.image_uri,
+                c.description,
+                c.created_at,
+                COALESCE(crc.reply_count::TEXT, '0') as reply_count,
+                COALESCE(cu.price::TEXT, '0') as price,
+                json_build_object(
+                    'nickname', a.nickname,
+                    'image_uri', a.image_uri
+                ) as creator
+            FROM coin c
+            LEFT JOIN account a ON c.creator = a.id
+            LEFT JOIN coin_reply_count crc ON c.id = crc.coin_id
+            LEFT JOIN curve cu ON c.id = cu.coin_id
+            WHERE LOWER(c.name) LIKE $1 OR LOWER(c.symbol) LIKE $1
+            ORDER BY cu.price DESC NULLS LAST
+            LIMIT 50
+            "#,
+        )
+        .bind(search_query)
+        .fetch_all(&self.db.pool)
+        .await
+        .context("Failed to fetch coin information")?;
+
+        let mut order_tokens: Vec<OrderTokenResponse> = coin_responses
+            .into_iter()
+            .filter_map(|raw| {
+                let creator: User = serde_json::from_value(raw.creator).ok()?;
+
+                Some(OrderTokenResponse {
+                    id: raw.id.unwrap_or_default(),
+                    name: raw.name.unwrap_or_default(),
+                    symbol: raw.symbol.unwrap_or_default(),
+                    image_uri: raw.image_uri.unwrap_or_default(),
+                    description: raw.description.unwrap_or_default(),
+                    reply_count: raw.reply_count.unwrap_or_default(),
+                    price: raw.price.unwrap_or_default(),
+                    creator,
+                    created_at: raw.created_at.unwrap_or_default(),
+                })
+            })
+            .collect();
+
+        //sort 를 뭘로 할지 정해져야함
+        order_tokens.sort_by(|a, b| {
+            let price_a: f64 = a.price.parse().unwrap_or(0.0);
+            let price_b: f64 = b.price.parse().unwrap_or(0.0);
+            price_b
+                .partial_cmp(&price_a)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        Ok(order_tokens)
     }
 }

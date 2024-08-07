@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use super::{NewSwapMessage, NewTokenMessage, SendMessageType};
+use super::{NewSwapMessage, NewTokenMessage, SendMessageType, User};
 use crate::types::model::{Coin, CoinReplyCount, Curve, Swap};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -51,12 +51,6 @@ pub struct OrderMessage {
     pub new_swap: Option<NewSwapMessage>,
     pub order_type: OrderType,
     pub order_token: Option<Vec<OrderTokenResponse>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct User {
-    pub nickname: String,
-    pub image_uri: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]

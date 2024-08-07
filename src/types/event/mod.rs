@@ -2,7 +2,7 @@ pub mod coin_message;
 pub mod order;
 pub mod wrapper;
 
-use order::{CreateSwapCoinInfo, OrderTokenResponse, User};
+use order::{CreateSwapCoinInfo, OrderTokenResponse};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
@@ -16,7 +16,11 @@ pub struct CoinAndUserInfo {
     pub user_nickname: String,
     pub user_image_uri: String,
 }
-
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct User {
+    pub nickname: String,
+    pub image_uri: String,
+}
 #[derive(Debug, Clone, Serialize)]
 pub enum SendMessageType {
     ALL,

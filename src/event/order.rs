@@ -216,7 +216,9 @@ impl OrderEventProducer {
         coin: Coin,
     ) -> Result<Option<OrderTokenResponse>> {
         let order_controller = OrderController::new(db);
-        let order_repsonse = order_controller.get_order_token_response(&coin.id).await?;
+        let order_repsonse = order_controller
+            .get_order_token_response_by_coin_id(&coin.id)
+            .await?;
         let result = self
             .redis
             .add_to_creation_time_order(&order_repsonse, coin.created_at.to_string())
@@ -233,7 +235,7 @@ impl OrderEventProducer {
     ) -> Result<Option<OrderTokenResponse>> {
         let order_controller = OrderController::new(db);
         let order_repsonse = order_controller
-            .get_order_token_response(&swap.coin_id)
+            .get_order_token_response_by_coin_id(&swap.coin_id)
             .await?;
         let result = self
             .redis
@@ -251,7 +253,7 @@ impl OrderEventProducer {
         // let coin = coin_controller.get_coin_by_id(&curve.coin_id).await?;
         let order_controller = OrderController::new(db);
         let order_repsonse = order_controller
-            .get_order_token_response(&curve.coin_id)
+            .get_order_token_response_by_coin_id(&curve.coin_id)
             .await?;
         let score = curve.price.to_string();
         let result = self
@@ -268,7 +270,7 @@ impl OrderEventProducer {
     ) -> Result<Option<OrderTokenResponse>> {
         let order_controller = OrderController::new(db);
         let order_repsonse = order_controller
-            .get_order_token_response(&coin_reply.coin_id)
+            .get_order_token_response_by_coin_id(&coin_reply.coin_id)
             .await?;
         let score = Utc::now().timestamp();
         let result = self
@@ -284,7 +286,7 @@ impl OrderEventProducer {
     ) -> Result<Option<OrderTokenResponse>> {
         let order_controller = OrderController::new(db);
         let coin = order_controller
-            .get_order_token_response(&coin_reply.coin_id)
+            .get_order_token_response_by_coin_id(&coin_reply.coin_id)
             .await?;
         let result = self
             .redis

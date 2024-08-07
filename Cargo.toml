@@ -7,16 +7,14 @@ edition = "2021"
 #ERROR
 anyhow = "1.0.86"
 
-##POSTGRES
 sqlx = { version = "0.8.0", features = [
     "runtime-tokio",
     "postgres",
     "tls-rustls",
     "bigdecimal",
-    "time",
     "chrono",
     "json",
-] }
+] } ##POSTGRES
 
 #REDIS
 redis = { version = "0.25.4", features = [

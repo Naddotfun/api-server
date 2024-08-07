@@ -1,10 +1,8 @@
+pub mod result;
 pub mod routes;
-pub mod socket;
 pub mod state;
 use std::{
-    borrow::Cow,
     net::{IpAddr, SocketAddr},
-    ops::ControlFlow,
     str::FromStr,
     sync::Arc,
     time::Duration,
@@ -13,20 +11,14 @@ use std::{
 use anyhow::Result;
 use axum::{
     error_handling::HandleErrorLayer,
-    extract::{
-        ws::{CloseFrame, Message, WebSocket},
-        ConnectInfo, State, WebSocketUpgrade,
-    },
     http::{Method, StatusCode, Uri},
     response::IntoResponse,
     routing::get,
     BoxError, Router,
 };
-use axum_extra::{headers, TypedHeader};
-use futures::{SinkExt, StreamExt};
-use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
-use socket::handle_socket;
+
+use routes::{profile, search, socket};
+
 use state::AppState;
 use tower::ServiceBuilder;
 use tracing::info;
@@ -52,7 +44,9 @@ pub async fn main(
     };
     let app = Router::new()
         .route("/", get(|| async { "Hello, World!" }))
-        .route("/ws", get(ws_handler))
+        .merge(socket::router())
+        .merge(search::router())
+        .merge(profile::router())
         .layer(
             ServiceBuilder::new()
                 .layer(HandleErrorLayer::new(handle_timeout_error))
@@ -74,24 +68,6 @@ pub async fn main(
     .await?;
 
     Ok(())
-}
-
-async fn ws_handler(
-    ws: WebSocketUpgrade,
-    user_agent: Option<TypedHeader<headers::UserAgent>>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    State(state): State<AppState>,
-) -> impl IntoResponse {
-    let user_agent = if let Some(TypedHeader(user_agent)) = user_agent {
-        info!("User-Agent: {}", user_agent);
-        user_agent.to_string()
-    } else {
-        String::from("Unknown browser")
-    };
-    println!("`{user_agent}` at {addr} connected.");
-    // finalize the upgrade process by returning upgrade callback.
-    // we can customize the callback by sending additional info such as address.
-    ws.on_upgrade(move |socket| handle_socket(socket, addr, state))
 }
 
 async fn handler_404() -> impl IntoResponse {
