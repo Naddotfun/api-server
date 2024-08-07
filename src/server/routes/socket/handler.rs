@@ -1,11 +1,19 @@
 use std::net::SocketAddr;
 
-use super::state::AppState;
 use anyhow::{Context, Result};
-use axum::extract::ws::{Message, WebSocket};
+use axum::{
+    extract::{
+        ws::{Message, WebSocket},
+        ConnectInfo, State, WebSocketUpgrade,
+    },
+    response::IntoResponse,
+    routing::get,
+    Router,
+};
+
+use axum_extra::{headers, TypedHeader};
 use futures::{SinkExt, StreamExt};
-use json_rpc::{send_error_response, JsonRpcErrorCode, JsonRpcMethod, JsonRpcRequest};
-use subscribe::{handle_coin_subscribe, handle_order_subscribe};
+
 use tokio::{
     sync::{
         mpsc::{self, Sender},
@@ -15,12 +23,36 @@ use tokio::{
 };
 use tracing::{error, info};
 
-pub mod json_rpc;
-pub mod subscribe;
+use crate::server::{
+    routes::socket::json_rpc::{send_error_response, JsonRpcErrorCode},
+    state::AppState,
+};
+
+use super::{
+    json_rpc::{JsonRpcMethod, JsonRpcRequest},
+    subscribe::{handle_coin_subscribe, handle_order_subscribe},
+};
 enum ActiveSubscription {
     Order(JoinHandle<()>),
     Coin(JoinHandle<()>),
     None,
+}
+pub async fn ws_handler(
+    ws: WebSocketUpgrade,
+    user_agent: Option<TypedHeader<headers::UserAgent>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let user_agent = if let Some(TypedHeader(user_agent)) = user_agent {
+        info!("User-Agent: {}", user_agent);
+        user_agent.to_string()
+    } else {
+        String::from("Unknown browser")
+    };
+    println!("`{user_agent}` at {addr} connected.");
+    // finalize the upgrade process by returning upgrade callback.
+    // we can customize the callback by sending additional info such as address.
+    ws.on_upgrade(move |socket| handle_socket(socket, addr, state))
 }
 
 pub async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
