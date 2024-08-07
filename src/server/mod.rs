@@ -50,18 +50,12 @@ use crate::{
 #[openapi(
     paths(
         search::handler::search_token,
-        profile::handler::get_profile_by_nickname,
-        profile::handler::get_coins_held_by_nickname,
-        profile::handler::get_replies_by_nickname,
-        profile::handler::get_created_coins_by_nickname,
-        profile::handler::get_followers_by_nickname,
-        profile::handler::get_following_by_nickname,
-        profile::handler::get_profile_by_address,
-        profile::handler::get_coins_held_by_address,
-        profile::handler::get_replies_by_address,
-        profile::handler::get_created_coins_by_address,
-        profile::handler::get_followers_by_address,
-        profile::handler::get_following_by_address,
+        profile::handler::get_profile,
+        profile::handler::get_coins_held,
+        profile::handler::get_replies,
+        profile::handler::get_created_coins,
+        profile::handler::get_followers,
+        profile::handler::get_following,
     ),
     components(
         schemas(

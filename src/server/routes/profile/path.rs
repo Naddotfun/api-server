@@ -1,51 +1,33 @@
 #[derive(Debug)]
 pub enum ProfilePath {
-    ProfileByNickname,
-    ProfileByAddress,
-    CoinHeldByNickname,
-    CoinHeldByAddress,
-    RepliesByNickname,
-    RepliesByAddress,
-    CoinCreatedByNickname,
-    CoinCreatedByAddress,
-    FollowersByNickname,
-    FollowersByAddress,
-    FollowingByNickname,
-    FollowingByAddress,
+    Profile,
+    CoinHeld,
+    Replies,
+    CoinCreated,
+    Followers,
+    Following,
 }
 
 impl ProfilePath {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::ProfileByNickname => "/profile/:nickname",
-            Self::ProfileByAddress => "/profile/:address",
-            Self::CoinHeldByNickname => "/profile/coins-held/:nickname",
-            Self::CoinHeldByAddress => "/profile/coins-held/:address",
-            Self::RepliesByNickname => "/profile/replies/:nickname",
-            Self::RepliesByAddress => "/profile/replies/:address",
-            Self::CoinCreatedByNickname => "/profile/coins-created/:nickname",
-            Self::CoinCreatedByAddress => "/profile/coins-created/:address",
-            Self::FollowersByNickname => "/profile/followers/:nickname",
-            Self::FollowersByAddress => "/profile/followers/:address",
-            Self::FollowingByNickname => "/profile/following/:nickname",
-            Self::FollowingByAddress => "/profile/following/:address",
+            Self::Profile => "/profile/:user",
+            Self::CoinHeld => "/profile/coins-held/:user",
+            Self::Replies => "/profile/replies/:user",
+            Self::CoinCreated => "/profile/coins-created/:user",
+            Self::Followers => "/profile/followers/:user",
+            Self::Following => "/profile/following/:user",
         }
     }
 
     pub fn docs_str(&self) -> &'static str {
         match self {
-            Self::ProfileByNickname => "/profile/{nickname}",
-            Self::ProfileByAddress => "/profile/{address}",
-            Self::CoinHeldByNickname => "/profile/coins-held/{nickname}",
-            Self::CoinHeldByAddress => "/profile/coins-held/{address}",
-            Self::RepliesByNickname => "/profile/replies/{nickname}",
-            Self::RepliesByAddress => "/profile/replies/{address}",
-            Self::CoinCreatedByNickname => "/profile/coins-created/{nickname}",
-            Self::CoinCreatedByAddress => "/profile/coins-created/{address}",
-            Self::FollowersByNickname => "/profile/followers/{nickname}",
-            Self::FollowersByAddress => "/profile/followers/{address}",
-            Self::FollowingByNickname => "/profile/following/{nickname}",
-            Self::FollowingByAddress => "/profile/following/{address}",
+            Self::Profile => "/profile/{user}",
+            Self::CoinHeld => "/profile/coins-held/{user}",
+            Self::Replies => "/profile/replies/{user}",
+            Self::CoinCreated => "/profile/coins-created/{user}",
+            Self::Followers => "/profile/followers/{user}",
+            Self::Following => "/profile/following/{user}",
         }
     }
 }
