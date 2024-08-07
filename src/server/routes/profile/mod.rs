@@ -14,7 +14,6 @@ pub fn router() -> Router<AppState> {
         .route(ProfilePath::CoinCreated.as_str(), get(get_coins_held))
         .route(ProfilePath::CoinHeld.as_str(), get(get_coins_held))
         .route(ProfilePath::Replies.as_str(), get(get_replies))
-        .route(ProfilePath::CoinCreated.as_str(), get(get_created_coins))
         .route(ProfilePath::Followers.as_str(), get(get_followers))
         .route(ProfilePath::Following.as_str(), get(get_following))
 }

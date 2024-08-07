@@ -76,8 +76,8 @@ use crate::{
     ),
     tags(
         (name = "Search Token", description = "Search token by name"),
-        (name = "Profile Nickname", description = "Get information about a user by Nickname"),
-        (name = "Profile Address", description = "Get information about a user by Address")
+        (name = "Profile", description = "Get information about a user by Nickname"),
+        
     )
 )]
 pub struct ApiDoc;
