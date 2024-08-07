@@ -1,22 +1,70 @@
 pub mod handler;
 pub mod path;
-use axum::{routing::get, Router};
-use path::Path;
-
 use crate::server::state::AppState;
+
+use axum::{routing::get, Router};
 use handler::{
-    get_coin_created, get_coin_hold, get_followers, get_followings, get_profile, get_replies,
+    get_coins_held_by_address, get_coins_held_by_nickname, get_created_coins_by_address,
+    get_created_coins_by_nickname, get_followers_by_address, get_followers_by_nickname,
+    get_following_by_address, get_following_by_nickname, get_profile_by_address,
+    get_profile_by_nickname, get_replies_by_address, get_replies_by_nickname,
 };
+use path::ProfilePath;
+
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route(Path::Main.as_str(), get(get_profile))
-        .route(Path::CoinHeld.as_str(), get(get_coin_hold))
-        .route(Path::Replies.as_str(), get(get_replies))
-        // // .route(
-        // //     Path::Notifications.as_str(),
-        // //     get(handler::get_notifications),
-        // // )
-        .route(Path::CoinCreated.as_str(), get(get_coin_created))
-        .route(Path::Followers.as_str(), get(get_followers))
-        .route(Path::Followings.as_str(), get(get_followings))
+        // Profile routes
+        .route(
+            ProfilePath::ProfileByNickname.as_str(),
+            get(get_profile_by_nickname),
+        )
+        .route(
+            ProfilePath::ProfileByAddress.as_str(),
+            get(get_profile_by_address),
+        )
+        // Coins held routes
+        .route(
+            ProfilePath::CoinHeldByNickname.as_str(),
+            get(get_coins_held_by_nickname),
+        )
+        .route(
+            ProfilePath::CoinHeldByAddress.as_str(),
+            get(get_coins_held_by_address),
+        )
+        // Replies routes
+        .route(
+            ProfilePath::RepliesByNickname.as_str(),
+            get(get_replies_by_nickname),
+        )
+        .route(
+            ProfilePath::RepliesByAddress.as_str(),
+            get(get_replies_by_address),
+        )
+        // Created coins routes
+        .route(
+            ProfilePath::CoinCreatedByNickname.as_str(),
+            get(get_created_coins_by_nickname),
+        )
+        .route(
+            ProfilePath::CoinCreatedByAddress.as_str(),
+            get(get_created_coins_by_address),
+        )
+        // Followers routes
+        .route(
+            ProfilePath::FollowersByNickname.as_str(),
+            get(get_followers_by_nickname),
+        )
+        .route(
+            ProfilePath::FollowersByAddress.as_str(),
+            get(get_followers_by_address),
+        )
+        // Following routes
+        .route(
+            ProfilePath::FollowingByNickname.as_str(),
+            get(get_following_by_nickname),
+        )
+        .route(
+            ProfilePath::FollowingByAddress.as_str(),
+            get(get_following_by_address),
+        )
 }

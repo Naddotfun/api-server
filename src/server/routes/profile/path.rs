@@ -1,24 +1,51 @@
 #[derive(Debug)]
-pub enum Path {
-    Main,
-    CoinHeld,
-    Replies,
-    Notifications,
-    CoinCreated,
-    Followers,
-    Followings,
+pub enum ProfilePath {
+    ProfileByNickname,
+    ProfileByAddress,
+    CoinHeldByNickname,
+    CoinHeldByAddress,
+    RepliesByNickname,
+    RepliesByAddress,
+    CoinCreatedByNickname,
+    CoinCreatedByAddress,
+    FollowersByNickname,
+    FollowersByAddress,
+    FollowingByNickname,
+    FollowingByAddress,
 }
 
-impl Path {
+impl ProfilePath {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Path::Main => "/profile/:nickname",
-            Path::CoinHeld => "/profile/:nickname/coins-held",
-            Path::Replies => "/profile/:nickname/replies",
-            Path::Notifications => "/profile/:nickname/notifications",
-            Path::CoinCreated => "/profile/:nickname/coins-created",
-            Path::Followers => "/profile/:nickname/followers",
-            Path::Followings => "/profile/:nickname/followings",
+            Self::ProfileByNickname => "/profile/nickname/:nickname",
+            Self::ProfileByAddress => "/profile/address/:address",
+            Self::CoinHeldByNickname => "/profile/nickname/:nickname/coins-held",
+            Self::CoinHeldByAddress => "/profile/address/:address/coins-held",
+            Self::RepliesByNickname => "/profile/nickname/:nickname/replies",
+            Self::RepliesByAddress => "/profile/address/:address/replies",
+            Self::CoinCreatedByNickname => "/profile/nickname/:nickname/coins-created",
+            Self::CoinCreatedByAddress => "/profile/address/:address/coins-created",
+            Self::FollowersByNickname => "/profile/nickname/:nickname/followers",
+            Self::FollowersByAddress => "/profile/address/:address/followers",
+            Self::FollowingByNickname => "/profile/nickname/:nickname/following",
+            Self::FollowingByAddress => "/profile/address/:address/following",
+        }
+    }
+
+    pub fn as_docs_str(&self) -> &'static str {
+        match self {
+            Self::ProfileByNickname => "/profile/nickname/{nickname}",
+            Self::ProfileByAddress => "/profile/address/{address}",
+            Self::CoinHeldByNickname => "/profile/nickname/{nickname}/coins-held",
+            Self::CoinHeldByAddress => "/profile/address/{address}/coins-held",
+            Self::RepliesByNickname => "/profile/nickname/{nickname}/replies",
+            Self::RepliesByAddress => "/profile/address/{address}/replies",
+            Self::CoinCreatedByNickname => "/profile/nickname/{nickname}/coins-created",
+            Self::CoinCreatedByAddress => "/profile/address/{address}/coins-created",
+            Self::FollowersByNickname => "/profile/nickname/{nickname}/followers",
+            Self::FollowersByAddress => "/profile/address/{address}/followers",
+            Self::FollowingByNickname => "/profile/nickname/{nickname}/following",
+            Self::FollowingByAddress => "/profile/address/{address}/following",
         }
     }
 }

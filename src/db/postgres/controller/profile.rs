@@ -1,11 +1,13 @@
 use anyhow::Result;
 use bigdecimal::{BigDecimal, Zero};
+use sqlx::FromRow;
 use std::sync::Arc;
 
 use crate::{
     db::postgres::PostgresDatabase,
     types::{
         model::{Account, Coin, Curve, Thread},
+        profile::Identifier,
         HoldCoinResponse,
     },
 };
@@ -13,48 +15,101 @@ use crate::{
 pub struct ProfileController {
     pub db: Arc<PostgresDatabase>,
 }
+#[derive(FromRow)]
+struct CoinHoldingRecord {
+    // Coin fields
+    id: String,
+    name: String,
+    symbol: String,
+    image_uri: String,
+    description: Option<String>,
+    creator: String,
+    created_at: i64,
+    twitter: Option<String>,
+    telegram: Option<String>,
+    website: Option<String>,
+    is_listing: bool,
+    create_transaction_hash: String,
+    is_updated: bool,
+    // Additional fields
+    balance: BigDecimal,
+    price: Option<BigDecimal>,
+}
 
 impl ProfileController {
     pub fn new(db: Arc<PostgresDatabase>) -> Self {
         ProfileController { db }
     }
-
-    pub async fn get_profile(&self, identifier: &str) -> Result<Account> {
-        let account = sqlx::query_as!(
-            Account,
-            r#"
-            SELECT id, nickname, bio, image_uri, follower_count, following_count, like_count
-            FROM account
-            WHERE nickname = $1 OR id = $1
-            "#,
-            identifier
-        )
-        .fetch_one(&self.db.pool)
-        .await?;
+    pub async fn get_profile(&self, identifier: &Identifier) -> Result<Account> {
+        let account = match identifier {
+            Identifier::Nickname(nickname) => {
+                sqlx::query_as!(
+                    Account,
+                    "SELECT * FROM account WHERE nickname = $1",
+                    nickname
+                )
+                .fetch_one(&self.db.pool)
+                .await?
+            }
+            Identifier::Address(address) => {
+                sqlx::query_as!(Account, "SELECT * FROM account WHERE id = $1", address)
+                    .fetch_one(&self.db.pool)
+                    .await?
+            }
+        };
 
         Ok(account)
     }
 
-    pub async fn get_account_holding_coin(&self, address: &str) -> Result<Vec<HoldCoinResponse>> {
-        let holdings = sqlx::query!(
-            r#"
-            SELECT 
-               c.*,
-                b.amount AS balance,
-                COALESCE(cu.price, 0) AS price
-            FROM 
-                balance b
-            JOIN 
-                coin c ON b.coin_id = c.id
-            LEFT JOIN 
-                curve cu ON c.id = cu.coin_id
-            WHERE 
-                b.account = $1
-            "#,
-            address
-        )
-        .fetch_all(&self.db.pool)
-        .await?;
+    pub async fn get_holding_coin(&self, identifier: &Identifier) -> Result<Vec<HoldCoinResponse>> {
+        let holdings = match identifier {
+            Identifier::Nickname(nickname) => {
+                sqlx::query_as!(
+                    CoinHoldingRecord,
+                    r#"
+                    SELECT 
+                       c.*,
+                        b.amount AS balance,
+                        COALESCE(cu.price, 0) AS price
+                    FROM 
+                        balance b
+                    JOIN 
+                        account a ON b.account = a.id
+                    JOIN 
+                        coin c ON b.coin_id = c.id
+                    LEFT JOIN 
+                        curve cu ON c.id = cu.coin_id
+                    WHERE 
+                        a.nickname = $1
+                    "#,
+                    nickname
+                )
+                .fetch_all(&self.db.pool)
+                .await?
+            }
+            Identifier::Address(address) => {
+                sqlx::query_as!(
+                    CoinHoldingRecord,
+                    r#"
+                    SELECT 
+                       c.*,
+                        b.amount AS balance,
+                        COALESCE(cu.price, 0) AS price
+                    FROM 
+                        balance b
+                    JOIN 
+                        coin c ON b.coin_id = c.id
+                    LEFT JOIN 
+                        curve cu ON c.id = cu.coin_id
+                    WHERE 
+                        b.account = $1
+                    "#,
+                    address
+                )
+                .fetch_all(&self.db.pool)
+                .await?
+            }
+        };
 
         let mut results: Vec<HoldCoinResponse> = holdings
             .into_iter()
@@ -75,16 +130,14 @@ impl ProfileController {
                     is_updated: row.is_updated,
                 };
 
-                let balance = row.balance;
-                let price = row.price.unwrap_or_else(BigDecimal::zero);
-
                 HoldCoinResponse {
                     coin,
-                    balance,
-                    price,
+                    balance: row.balance,
+                    price: row.price.unwrap_or_else(BigDecimal::zero),
                 }
             })
             .collect();
+
         results.sort_by(|a, b| {
             let value_a = &a.price * &a.balance;
             let value_b = &b.price * &b.balance;
@@ -92,73 +145,150 @@ impl ProfileController {
                 .partial_cmp(&value_a)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
+
         Ok(results)
     }
 
-    pub async fn get_account_replies(&self, address: &str) -> Result<Vec<Thread>> {
-        let replies = sqlx::query_as!(
-            Thread,
-            r#"
-            SELECT *
-            FROM thread
-            WHERE author_id = $1
-            ORDER BY created_at DESC
-            "#,
-            address
-        )
-        .fetch_all(&self.db.pool)
-        .await?;
+    pub async fn get_replies(&self, identifier: &Identifier) -> Result<Vec<Thread>> {
+        let replies = match identifier {
+            Identifier::Nickname(nickname) => {
+                sqlx::query_as!(
+                    Thread,
+                    r#"
+                    SELECT t.*
+                    FROM thread t
+                    JOIN account a ON t.author_id = a.id
+                    WHERE a.nickname = $1
+                    ORDER BY t.created_at DESC
+                    "#,
+                    nickname
+                )
+                .fetch_all(&self.db.pool)
+                .await?
+            }
+            Identifier::Address(address) => {
+                sqlx::query_as!(
+                    Thread,
+                    r#"
+                    SELECT *
+                    FROM thread
+                    WHERE author_id = $1
+                    ORDER BY created_at DESC
+                    "#,
+                    address
+                )
+                .fetch_all(&self.db.pool)
+                .await?
+            }
+        };
 
         Ok(replies)
     }
 
-    pub async fn get_account_created_coins(&self, address: &str) -> Result<Vec<Coin>> {
-        let coins = sqlx::query_as!(
-            Coin,
-            r#"
-            SELECT *
-            FROM coin
-            WHERE creator = $1
-            ORDER BY created_at DESC
-            "#,
-            address
-        )
-        .fetch_all(&self.db.pool)
-        .await?;
+    pub async fn get_created_coins(&self, identifier: &Identifier) -> Result<Vec<Coin>> {
+        let coins = match identifier {
+            Identifier::Nickname(nickname) => {
+                sqlx::query_as!(
+                    Coin,
+                    r#"
+                    SELECT c.*
+                    FROM coin c
+                    JOIN account a ON c.creator = a.id
+                    WHERE a.nickname = $1
+                    ORDER BY c.created_at DESC
+                    "#,
+                    nickname
+                )
+                .fetch_all(&self.db.pool)
+                .await?
+            }
+            Identifier::Address(address) => {
+                sqlx::query_as!(
+                    Coin,
+                    r#"
+                    SELECT *
+                    FROM coin
+                    WHERE creator = $1
+                    ORDER BY created_at DESC
+                    "#,
+                    address
+                )
+                .fetch_all(&self.db.pool)
+                .await?
+            }
+        };
 
         Ok(coins)
     }
 
-    pub async fn get_account_followers(&self, address: &str) -> Result<Vec<Account>> {
-        let followers = sqlx::query_as!(
-            Account,
-            r#"
-            SELECT a.id, a.nickname, a.bio, a.image_uri, a.follower_count, a.following_count, a.like_count
-            FROM follow f
-            JOIN account a ON f.following_id = a.id
-            WHERE f.follower_id = $1
-            "#,
-            address
-        )
-        .fetch_all(&self.db.pool)
-        .await?;
+    pub async fn get_followers(&self, identifier: &Identifier) -> Result<Vec<Account>> {
+        let followers = match identifier {
+            Identifier::Nickname(nickname) => {
+                sqlx::query_as!(
+                    Account,
+                    r#"
+                    SELECT a2.id, a2.nickname, a2.bio, a2.image_uri, a2.follower_count, a2.following_count, a2.like_count
+                    FROM follow f
+                    JOIN account a1 ON f.following_id = a1.id
+                    JOIN account a2 ON f.follower_id = a2.id
+                    WHERE a1.nickname = $1
+                    "#,
+                    nickname
+                )
+                .fetch_all(&self.db.pool)
+                .await?
+            },
+            Identifier::Address(address) => {
+                sqlx::query_as!(
+                    Account,
+                    r#"
+                    SELECT a.id, a.nickname, a.bio, a.image_uri, a.follower_count, a.following_count, a.like_count
+                    FROM follow f
+                    JOIN account a ON f.follower_id = a.id
+                    WHERE f.following_id = $1
+                    "#,
+                    address
+                )
+                .fetch_all(&self.db.pool)
+                .await?
+            }
+        };
 
         Ok(followers)
     }
 
-    pub async fn get_account_follwing(&self, address: &str) -> Result<Vec<Account>> {
-        let followings = sqlx::query_as!(
-            Account,
-            r#"
-            SELECT a.id, a.nickname, a.bio, a.image_uri, a.follower_count, a.following_count, a.like_count
-            FROM follow f
-            JOIN account a ON f.follower_id = a.id
-            WHERE f.following_id = $1
-            "#,
-            address
-        )
-        .fetch_all(&self.db.pool)
-        .await?;
+    pub async fn get_following(&self, identifier: &Identifier) -> Result<Vec<Account>> {
+        let followings = match identifier {
+            Identifier::Nickname(nickname) => {
+                sqlx::query_as!(
+                    Account,
+                    r#"
+                    SELECT a2.id, a2.nickname, a2.bio, a2.image_uri, a2.follower_count, a2.following_count, a2.like_count
+                    FROM follow f
+                    JOIN account a1 ON f.follower_id = a1.id
+                    JOIN account a2 ON f.following_id = a2.id
+                    WHERE a1.nickname = $1
+                    "#,
+                    nickname
+                )
+                .fetch_all(&self.db.pool)
+                .await?
+            },
+            Identifier::Address(address) => {
+                sqlx::query_as!(
+                    Account,
+                    r#"
+                    SELECT a.id, a.nickname, a.bio, a.image_uri, a.follower_count, a.following_count, a.like_count
+                    FROM follow f
+                    JOIN account a ON f.following_id = a.id
+                    WHERE f.follower_id = $1
+                    "#,
+                    address
+                )
+                .fetch_all(&self.db.pool)
+                .await?
+            }
+        };
 
         Ok(followings)
     }
