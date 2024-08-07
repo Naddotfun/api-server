@@ -2,7 +2,7 @@ use std::{env, sync::Arc};
 
 use anyhow::Result;
 
-use read_engine::{
+use api_server::{
     db::{postgres::PostgresDatabase, redis::RedisDatabase},
     event::{
         coin::{self, CoinEventProducer},
