@@ -15,7 +15,7 @@ pub struct ProfileController {
     pub db: Arc<PostgresDatabase>,
 }
 #[derive(FromRow)]
-struct CoinHoldingRecord {
+struct CoinHoldingRow {
     // Coin fields
     id: String,
     name: String,
@@ -33,6 +33,13 @@ struct CoinHoldingRecord {
     // Additional fields
     balance: BigDecimal,
     price: Option<BigDecimal>,
+}
+
+#[derive(FromRow)]
+struct CoinHoldingRecord {
+    coin: Coin,
+    balance: BigDecimal,
+    price: BigDecimal,
 }
 
 impl ProfileController {
@@ -64,7 +71,7 @@ impl ProfileController {
         let holdings = match identifier {
             Identifier::Nickname(nickname) => {
                 sqlx::query_as!(
-                    CoinHoldingRecord,
+                    CoinHoldingRow,
                     r#"
                     SELECT 
                        c.*,
@@ -88,7 +95,7 @@ impl ProfileController {
             }
             Identifier::Address(address) => {
                 sqlx::query_as!(
-                    CoinHoldingRecord,
+                    CoinHoldingRow,
                     r#"
                     SELECT 
                        c.*,
@@ -110,7 +117,7 @@ impl ProfileController {
             }
         };
 
-        let mut results: Vec<HoldCoin> = holdings
+        let mut results: Vec<CoinHoldingRecord> = holdings
             .into_iter()
             .map(|row| {
                 let coin = Coin {
@@ -129,7 +136,7 @@ impl ProfileController {
                     is_updated: row.is_updated,
                 };
 
-                HoldCoin {
+                CoinHoldingRecord {
                     coin,
                     balance: row.balance,
                     price: row.price.unwrap_or(BigDecimal::zero()),
@@ -144,6 +151,15 @@ impl ProfileController {
                 .partial_cmp(&value_a)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
+
+        let results: Vec<HoldCoin> = results
+            .into_iter()
+            .map(|record| HoldCoin {
+                coin: record.coin,
+                balance: record.balance.to_string(),
+                price: record.price.to_string(),
+            })
+            .collect();
 
         Ok(results)
     }

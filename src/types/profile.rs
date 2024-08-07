@@ -12,6 +12,6 @@ pub enum Identifier {
 #[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct HoldCoin {
     pub coin: Coin,
-    pub balance: BigDecimal,
-    pub price: BigDecimal,
+    pub balance: String,
+    pub price: String,
 }
