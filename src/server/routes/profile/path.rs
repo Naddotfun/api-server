@@ -32,7 +32,7 @@ impl ProfilePath {
         }
     }
 
-    pub fn as_docs_str(&self) -> &'static str {
+    pub fn docs_str(&self) -> &'static str {
         match self {
             Self::ProfileByNickname => "/profile/nickname/{nickname}",
             Self::ProfileByAddress => "/profile/address/{address}",

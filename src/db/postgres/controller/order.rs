@@ -208,8 +208,6 @@ impl OrderController {
 
     // TODO: 어떤 식으로 정렬할지
     pub async fn search_order_tokens(&self, query: &str) -> Result<Vec<OrderTokenResponse>> {
-        let search_query = format!("%{}%", query.to_lowercase());
-
         let coin_responses: Vec<OrderTokenResponseRaw> = sqlx::query_as(
             r#"
             SELECT 
@@ -234,11 +232,11 @@ impl OrderController {
             LIMIT 50
             "#,
         )
-        .bind(search_query)
+        .bind(query)
         .fetch_all(&self.db.pool)
         .await
         .context("Failed to fetch coin information")?;
-
+        info!("coin_responses: {:?}", coin_responses);
         let mut order_tokens: Vec<OrderTokenResponse> = coin_responses
             .into_iter()
             .filter_map(|raw| {

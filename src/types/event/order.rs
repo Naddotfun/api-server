@@ -5,6 +5,7 @@ use crate::types::model::{Coin, CoinReplyCount, Curve, Swap};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::FromRow;
+use utoipa::ToSchema;
 #[derive(Debug, Clone, Serialize)]
 pub enum OrderEvent {
     CreationTime(Coin),
@@ -58,7 +59,7 @@ pub struct CreateSwapCoinInfo {
     pub symbol: String,
     pub image_uri: String,
 }
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct OrderTokenResponse {
     pub id: String,          //coin.id
     pub creator: User,       //coin 의 creator -> account table -> select nickname, image uri

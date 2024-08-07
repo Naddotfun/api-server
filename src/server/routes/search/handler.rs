@@ -1,21 +1,14 @@
+use axum::extract::Path;
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
-use tracing::instrument;
+use tracing::{info, instrument};
 use utoipa::ToSchema;
 
-use super::path::Path;
+use super::path::Path as SearchPath;
 use crate::db::postgres::controller::order::OrderController;
 use crate::server::result::AppJsonResult;
 use crate::types::event::order::OrderTokenResponse;
 use crate::{server::state::AppState, types::model::Coin};
-#[derive(Debug, Deserialize, ToSchema)]
-#[schema(example = json!({
-    "address": "Your address"
-}))]
-pub struct SearchRequest {
-    #[schema(example = "Your address")]
-    token_name: String,
-}
 
 #[derive(Debug, Serialize, ToSchema)]
 #[schema(example = json!({
@@ -26,24 +19,24 @@ pub struct SearchResponse {
     tokens: Vec<OrderTokenResponse>,
 }
 #[utoipa::path(
-    post,
-    path = Path::Search.as_str(),
-    request_body = SearchRequest,
+    get,
+    path = SearchPath::Search.docs_str(),
+    params(
+        ("token" = String, Path, description = "Token to search for")
+    ),
     responses(
         (status = 200, description = "Nonce generated successfully", body = SearchResponse),
         (status = 400, description = "Bad request"),
         (status = 500, description = "Internal server error")
     ),
-    tag = "Auth"
+    tag = "Search Token"
 )]
 #[instrument(skip(state))]
 pub async fn search_token(
+    Path(token): Path<String>,
     State(state): State<AppState>,
-    Json(payload): Json<SearchRequest>,
 ) -> AppJsonResult<SearchResponse> {
-    let query = payload.token_name;
-    // `session_address`를 사용하여 인증된 사용자의 주소에 접근
     let order_contoller = OrderController::new(state.postgres.clone());
-    let tokens = order_contoller.search_order_tokens(&query).await?;
+    let tokens = order_contoller.search_order_tokens(&token).await?;
     Ok(Json(SearchResponse { tokens }))
 }

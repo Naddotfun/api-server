@@ -3,8 +3,7 @@ use crate::{
     server::{result::AppJsonResult, state::AppState},
     types::{
         model::{Account, Coin, Thread},
-        profile::Identifier,
-        HoldCoinResponse,
+        profile::{HoldCoin, Identifier},
     },
 };
 
@@ -23,8 +22,8 @@ pub struct ProfileResponse {
     account: Account,
 }
 #[derive(ToSchema, Serialize)]
-pub struct HoldCoinsResponse {
-    coins: Vec<HoldCoinResponse>,
+pub struct HeldCoinsResponse {
+    coins: Vec<HoldCoin>,
 }
 #[derive(ToSchema, Serialize)]
 pub struct RepliesResponse {
@@ -48,7 +47,7 @@ pub struct FollowingResponse {
 /// Get user profile by nickname
 #[utoipa::path(
     get,
-    path = ProfilePath::ProfileByNickname.as_str(),
+    path = ProfilePath::ProfileByNickname.docs_str(),
     params(
         ("nickname" = String, Path, description = "User's nickname")
     ),
@@ -57,7 +56,7 @@ pub struct FollowingResponse {
         (status = 404, description = "User not found"),
         (status = 500, description = "Internal server error")
     ),
-    tag = "Profile"
+    tag = "Profile Nickname"
 )]
 pub async fn get_profile_by_nickname(
     Path(nickname): Path<String>,
@@ -73,7 +72,7 @@ pub async fn get_profile_by_nickname(
 /// Get user profile by Ethereum address
 #[utoipa::path(
     get,
-    path = ProfilePath::ProfileByAddress.as_str(),
+    path = ProfilePath::ProfileByAddress.docs_str(),
     params(
         ("address" = String, Path, description = "User's Ethereum address ")
     ),
@@ -82,7 +81,7 @@ pub async fn get_profile_by_nickname(
         (status = 404, description = "User not found"),
         (status = 500, description = "Internal server error")
     ),
-    tag = "Profile"
+    tag = "Profile Address"
 )]
 pub async fn get_profile_by_address(
     Path(address): Path<String>,
@@ -98,57 +97,57 @@ pub async fn get_profile_by_address(
 /// Get user's held coins by nickname
 #[utoipa::path(
     get,
-    path = ProfilePath::CoinHeldByNickname.as_str(),
+    path = ProfilePath::CoinHeldByNickname.docs_str(),
     params(
         ("nickname" = String, Path, description = "User's nickname")
     ),
     responses(
-        (status = 200, description = "User's held coins retrieved successfully", body = HoldCoinsResponse),
+        (status = 200, description = "User's held coins retrieved successfully", body = HeldCoinsResponse),
         (status = 404, description = "User not found"),
         (status = 500, description = "Internal server error")
     ),
-    tag = "Profile"
+     tag = "Profile Nickname"
 )]
 pub async fn get_coins_held_by_nickname(
     Path(nickname): Path<String>,
     State(state): State<AppState>,
-) -> AppJsonResult<HoldCoinsResponse> {
+) -> AppJsonResult<HeldCoinsResponse> {
     let profile_controller = ProfileController::new(state.postgres.clone());
     let coins = profile_controller
         .get_holding_coin(&Identifier::Nickname(nickname))
         .await?;
-    Ok(Json(HoldCoinsResponse { coins }))
+    Ok(Json(HeldCoinsResponse { coins }))
 }
 
 /// Get user's held coins by Ethereum address
 #[utoipa::path(
     get,
-    path = ProfilePath::CoinHeldByAddress.as_str(),
+    path = ProfilePath::CoinHeldByAddress.docs_str(),
     params(
         ("address" = String, Path, description = "User's Ethereum address (0x prefixed)")
     ),
     responses(
-        (status = 200, description = "User's held coins retrieved successfully", body = HoldCoinsResponse),
+        (status = 200, description = "User's held coins retrieved successfully", body = HeldCoinsResponse),
         (status = 404, description = "User not found"),
         (status = 500, description = "Internal server error")
     ),
-    tag = "Profile"
+    tag = "Profile Address"
 )]
 pub async fn get_coins_held_by_address(
     Path(address): Path<String>,
     State(state): State<AppState>,
-) -> AppJsonResult<HoldCoinsResponse> {
+) -> AppJsonResult<HeldCoinsResponse> {
     let profile_controller = ProfileController::new(state.postgres.clone());
     let coins = profile_controller
         .get_holding_coin(&Identifier::Address(address))
         .await?;
-    Ok(Json(HoldCoinsResponse { coins }))
+    Ok(Json(HeldCoinsResponse { coins }))
 }
 
 /// Get user's replies by nickname
 #[utoipa::path(
     get,
-    path = ProfilePath::RepliesByNickname.as_str(),
+    path = ProfilePath::RepliesByNickname.docs_str(),
     params(
         ("nickname" = String, Path, description = "User's nickname")
     ),
@@ -157,7 +156,7 @@ pub async fn get_coins_held_by_address(
         (status = 404, description = "User not found"),
         (status = 500, description = "Internal server error")
     ),
-    tag = "Profile"
+    tag = "Profile Nickname"
 )]
 pub async fn get_replies_by_nickname(
     Path(nickname): Path<String>,
@@ -173,7 +172,7 @@ pub async fn get_replies_by_nickname(
 /// Get user's replies by Ethereum address
 #[utoipa::path(
     get,
-    path = ProfilePath::RepliesByAddress.as_str(),
+    path = ProfilePath::RepliesByAddress.docs_str(),
     params(
         ("address" = String, Path, description = "User's Ethereum address (0x prefixed)")
     ),
@@ -182,7 +181,7 @@ pub async fn get_replies_by_nickname(
         (status = 404, description = "User not found"),
         (status = 500, description = "Internal server error")
     ),
-    tag = "Profile"
+    tag = "Profile Address"
 )]
 pub async fn get_replies_by_address(
     Path(address): Path<String>,
@@ -198,7 +197,7 @@ pub async fn get_replies_by_address(
 /// Get coins created by user (by nickname)
 #[utoipa::path(
     get,
-    path = ProfilePath::CoinCreatedByNickname.as_str(),
+    path = ProfilePath::CoinCreatedByNickname.docs_str(),
     params(
         ("nickname" = String, Path, description = "User's nickname")
     ),
@@ -207,7 +206,7 @@ pub async fn get_replies_by_address(
         (status = 404, description = "User not found"),
         (status = 500, description = "Internal server error")
     ),
-    tag = "Profile"
+    tag = "Profile Nickname"
 )]
 pub async fn get_created_coins_by_nickname(
     Path(nickname): Path<String>,
@@ -223,7 +222,7 @@ pub async fn get_created_coins_by_nickname(
 /// Get coins created by user (by Ethereum address)
 #[utoipa::path(
     get,
-    path = ProfilePath::CoinCreatedByAddress.as_str(),
+    path = ProfilePath::CoinCreatedByAddress.docs_str(),
     params(
         ("address" = String, Path, description = "User's Ethereum address (0x prefixed)")
     ),
@@ -232,7 +231,7 @@ pub async fn get_created_coins_by_nickname(
         (status = 404, description = "User not found"),
         (status = 500, description = "Internal server error")
     ),
-    tag = "Profile"
+    tag = "Profile Address"
 )]
 pub async fn get_created_coins_by_address(
     Path(address): Path<String>,
@@ -248,7 +247,7 @@ pub async fn get_created_coins_by_address(
 /// Get user's followers by nickname
 #[utoipa::path(
     get,
-    path = ProfilePath::FollowersByNickname.as_str(),
+    path = ProfilePath::FollowersByNickname.docs_str(),
     params(
         ("nickname" = String, Path, description = "User's nickname")
     ),
@@ -257,7 +256,7 @@ pub async fn get_created_coins_by_address(
         (status = 404, description = "User not found"),
         (status = 500, description = "Internal server error")
     ),
-    tag = "Profile"
+    tag = "Profile Nickname"
 )]
 pub async fn get_followers_by_nickname(
     Path(nickname): Path<String>,
@@ -273,7 +272,7 @@ pub async fn get_followers_by_nickname(
 /// Get user's followers by Ethereum address
 #[utoipa::path(
     get,
-    path = ProfilePath::FollowersByAddress.as_str(),
+    path = ProfilePath::FollowersByAddress.docs_str(),
     params(
         ("address" = String, Path, description = "User's Ethereum address (0x prefixed)")
     ),
@@ -282,7 +281,7 @@ pub async fn get_followers_by_nickname(
         (status = 404, description = "User not found"),
         (status = 500, description = "Internal server error")
     ),
-    tag = "Profile"
+    tag = "Profile Address"
 )]
 pub async fn get_followers_by_address(
     Path(address): Path<String>,
@@ -298,7 +297,7 @@ pub async fn get_followers_by_address(
 /// Get accounts followed by user (by nickname)
 #[utoipa::path(
     get,
-    path = ProfilePath::FollowingByNickname.as_str(),
+    path = ProfilePath::FollowingByNickname.docs_str(),
     params(
         ("nickname" = String, Path, description = "User's nickname")
     ),
@@ -307,7 +306,7 @@ pub async fn get_followers_by_address(
         (status = 404, description = "User not found"),
         (status = 500, description = "Internal server error")
     ),
-    tag = "Profile"
+    tag = "Profile Nickname"
 )]
 pub async fn get_following_by_nickname(
     Path(nickname): Path<String>,
@@ -323,7 +322,7 @@ pub async fn get_following_by_nickname(
 /// Get accounts followed by user (by Ethereum address)
 #[utoipa::path(
     get,
-    path = ProfilePath::FollowingByAddress.as_str(),
+    path = ProfilePath::FollowingByAddress.docs_str(),
     params(
         ("address" = String, Path, description = "User's Ethereum address (0x prefixed)")
     ),
@@ -332,7 +331,7 @@ pub async fn get_following_by_nickname(
         (status = 404, description = "User not found"),
         (status = 500, description = "Internal server error")
     ),
-    tag = "Profile"
+    tag = "Profile Address"
 )]
 pub async fn get_following_by_address(
     Path(address): Path<String>,

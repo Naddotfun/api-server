@@ -7,8 +7,7 @@ use crate::{
     db::postgres::PostgresDatabase,
     types::{
         model::{Account, Coin, Curve, Thread},
-        profile::Identifier,
-        HoldCoinResponse,
+        profile::{HoldCoin, Identifier},
     },
 };
 
@@ -61,7 +60,7 @@ impl ProfileController {
         Ok(account)
     }
 
-    pub async fn get_holding_coin(&self, identifier: &Identifier) -> Result<Vec<HoldCoinResponse>> {
+    pub async fn get_holding_coin(&self, identifier: &Identifier) -> Result<Vec<HoldCoin>> {
         let holdings = match identifier {
             Identifier::Nickname(nickname) => {
                 sqlx::query_as!(
@@ -111,7 +110,7 @@ impl ProfileController {
             }
         };
 
-        let mut results: Vec<HoldCoinResponse> = holdings
+        let mut results: Vec<HoldCoin> = holdings
             .into_iter()
             .map(|row| {
                 let coin = Coin {
@@ -130,10 +129,10 @@ impl ProfileController {
                     is_updated: row.is_updated,
                 };
 
-                HoldCoinResponse {
+                HoldCoin {
                     coin,
                     balance: row.balance,
-                    price: row.price.unwrap_or_else(BigDecimal::zero),
+                    price: row.price.unwrap_or(BigDecimal::zero()),
                 }
             })
             .collect();

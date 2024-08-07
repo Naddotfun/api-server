@@ -17,16 +17,76 @@ use axum::{
     BoxError, Router,
 };
 
-use routes::{profile, search, socket};
+use bigdecimal::BigDecimal;
+use routes::{
+    profile::{
+        self,
+        handler::{
+            CreatedCoinsResponse, FollowersResponse, FollowingResponse, HeldCoinsResponse,
+            ProfileResponse, RepliesResponse,
+        },
+    },
+    search::{self, handler::SearchResponse},
+    socket,
+};
 
 use state::AppState;
 use tower::ServiceBuilder;
 use tracing::info;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
     db::{postgres::PostgresDatabase, redis::RedisDatabase},
     event::{coin::CoinEventProducer, order::OrderEventProducer},
+    types::{
+        event::order::OrderTokenResponse,
+        model::{Account, Coin, Thread},
+        profile::HoldCoin,
+    },
 };
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(
+        search::handler::search_token,
+        profile::handler::get_profile_by_nickname,
+        profile::handler::get_coins_held_by_nickname,
+        profile::handler::get_replies_by_nickname,
+        profile::handler::get_created_coins_by_nickname,
+        profile::handler::get_followers_by_nickname,
+        profile::handler::get_following_by_nickname,
+        profile::handler::get_profile_by_address,
+        profile::handler::get_coins_held_by_address,
+        profile::handler::get_replies_by_address,
+        profile::handler::get_created_coins_by_address,
+        profile::handler::get_followers_by_address,
+        profile::handler::get_following_by_address,
+    ),
+    components(
+        schemas(
+            ProfileResponse,
+            HeldCoinsResponse,
+            RepliesResponse,
+            CreatedCoinsResponse,
+            FollowersResponse,
+            FollowingResponse,
+            Account,
+            Coin,
+            HoldCoin,
+            Thread,
+            SearchResponse,
+            OrderTokenResponse,
+            
+        )
+    ),
+    tags(
+        (name = "Search Token", description = "Search token by name"),
+        (name = "Profile Nickname", description = "Get information about a user by Nickname"),
+        (name = "Profile Address", description = "Get information about a user by Address")
+    )
+)]
+pub struct ApiDoc;
 
 pub async fn main(
     postgres: Arc<PostgresDatabase>,
@@ -47,6 +107,7 @@ pub async fn main(
         .merge(socket::router())
         .merge(search::router())
         .merge(profile::router())
+        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .layer(
             ServiceBuilder::new()
                 .layer(HandleErrorLayer::new(handle_timeout_error))
