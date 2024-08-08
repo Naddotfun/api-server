@@ -96,11 +96,11 @@ pub async fn handle_coin_subscribe(
 ) -> Result<JoinHandle<()>> {
     let coin_id = parse_coin_id(request.params())
         .ok_or_else(|| anyhow::anyhow!("Invalid or missing coin ID"))?;
-    let chart_type = ChartType::from_str(
-        &parse_chart(request.params())
-            .ok_or_else(|| anyhow::anyhow!("Invalid or missing chart"))?,
-    )
-    .map_err(|e| anyhow::anyhow!("Failed to parse chart type: {}", e))?;
+    // let chart_type = ChartType::from_str(
+    //     &parse_chart(request.params())
+    //         .ok_or_else(|| anyhow::anyhow!("Invalid or missing chart"))?,
+    // )
+    // .map_err(|e| anyhow::anyhow!("Failed to parse chart type: {}", e))?;
 
     let mut receiver = state.coin_event_producer.get_coin_receiver(&coin_id).await;
 
@@ -126,9 +126,7 @@ pub async fn handle_coin_subscribe(
         .context("Failed to get new_swap")?;
     let coin_page_controller = CoinPageController::new(state.postgres.clone());
 
-    let coin_data = coin_page_controller
-        .get_coin_message(&coin_id, chart_type)
-        .await?;
+    let coin_data = coin_page_controller.get_coin_message(&coin_id).await?;
     info!("coin_data _ price {:?}", coin_data.curve);
     let message = CoinMessage {
         message_type: SendMessageType::ALL,
