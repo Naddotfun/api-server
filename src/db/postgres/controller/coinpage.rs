@@ -31,11 +31,11 @@ impl CoinPageController {
         let raw = sqlx::query_as::<_, CoinResponseRaw>(
             r#"
             SELECT 
-                (SELECT json_agg(row_to_json(s)) FROM swaps s WHERE s.coin_id = $1) as swap,
-                (SELECT json_agg(row_to_json(ch)) FROM charts ch WHERE ch.coin_id = $1) as chart,
-                (SELECT json_agg(row_to_json(b)) FROM balances b WHERE b.coin_id = $1) as balance,
-                (SELECT row_to_json(cu) FROM curves cu WHERE cu.coin_id = $1 LIMIT 1) as curve,
-                (SELECT json_agg(row_to_json(t)) FROM threads t WHERE t.coin_id = $1) as thread
+                (SELECT json_agg(row_to_json(s)) FROM swap s WHERE s.coin_id = $1) as swap,
+                (SELECT json_agg(row_to_json(ch)) FROM chart_5m ch WHERE ch.coin_id = $1) as chart,
+                (SELECT json_agg(row_to_json(b)) FROM balance b WHERE b.coin_id = $1) as balance,
+                (SELECT row_to_json(cu) FROM curve cu WHERE cu.coin_id = $1 LIMIT 1) as curve,
+                (SELECT json_agg(row_to_json(t)) FROM thread t WHERE t.coin_id = $1) as thread
             "#,
         )
         .bind(coin_id)
@@ -52,24 +52,3 @@ impl CoinPageController {
         })
     }
 }
-// fn json_to_vec<T: serde::de::DeserializeOwned>(row: &PgRow, field: &str) -> Result<Option<Vec<T>>> {
-//     let json: Value = row.try_get(field)?;
-//     if json.is_null() || json.as_array().map_or(true, |arr| arr.is_empty()) {
-//         Ok(None)
-//     } else {
-//         Ok(Some(
-//             serde_json::from_value(json).context("Failed to deserialize JSON to Vec")?,
-//         ))
-//     }
-// }
-
-// fn json_to_option<T: serde::de::DeserializeOwned>(row: &PgRow, field: &str) -> Result<Option<T>> {
-//     let json: Value = row.try_get(field)?;
-//     if json.is_null() {
-//         Ok(None)
-//     } else {
-//         Ok(Some(
-//             serde_json::from_value(json).context("Failed to deserialize JSON to type")?,
-//         ))
-//     }
-// }

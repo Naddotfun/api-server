@@ -47,6 +47,7 @@ impl OrderType {}
 
 #[derive(Debug, Clone, Serialize)]
 pub struct OrderMessage {
+    #[serde(skip)]
     pub message_type: SendMessageType,
     pub new_token: Option<NewTokenMessage>,
     pub new_swap: Option<NewSwapMessage>,

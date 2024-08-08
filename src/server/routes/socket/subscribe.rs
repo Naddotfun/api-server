@@ -103,7 +103,9 @@ pub async fn handle_coin_subscribe(
         .await
         .context("Failed to get new_swap")?;
     let coin_page_controller = CoinPageController::new(state.postgres.clone());
+
     let coin_data = coin_page_controller.get_coin_message(&coin_id).await?;
+    info!("coin_data _ price {:?}", coin_data.curve);
     let message = CoinMessage {
         message_type: SendMessageType::ALL,
         new_token,

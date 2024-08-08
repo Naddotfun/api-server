@@ -163,6 +163,7 @@ impl CoinEventProducer {
     }
 
     async fn handle_event(&self, event: CoinEvent) -> Result<Vec<CoinMessage>> {
+        info!("Handling event {:?}", event);
         match event {
             CoinEvent::Coin(coin) => self.handle_coin_event(coin).await,
             CoinEvent::Swap(swap) => self.handle_swap_event(swap).await,
@@ -216,7 +217,10 @@ impl CoinEventProducer {
         });
 
         *count += 1;
-        info!("Incrementing count for coin_id: {}", coin_id);
+        info!(
+            "Incrementing count for coin_id: {} count ={}",
+            coin_id, count
+        );
         CoinReceiver {
             receiver: sender.subscribe(),
             coin_id: coin_id.to_string(),

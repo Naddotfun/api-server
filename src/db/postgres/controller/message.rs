@@ -4,10 +4,7 @@ use std::sync::Arc;
 
 use crate::{
     db::postgres::PostgresDatabase,
-    types::{
-        event::{order::CreateSwapCoinInfo, CoinAndUserInfo, User},
-        model::{Account, Coin},
-    },
+    types::event::{order::CreateSwapCoinInfo, CoinAndUserInfo, User},
 };
 
 pub struct MessageController {

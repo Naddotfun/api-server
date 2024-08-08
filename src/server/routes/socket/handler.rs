@@ -122,7 +122,7 @@ async fn handle_message(
             match request.method() {
                 JsonRpcMethod::OrderSubscribe => {
                     // Cancel any existing subscription
-                    if let ActiveSubscription::Order(handle) | ActiveSubscription::Coin(handle) =
+                    if let ActiveSubscription::Order(handle) =
                         std::mem::replace(active_subscription, ActiveSubscription::None)
                     {
                         handle.abort();
@@ -133,7 +133,7 @@ async fn handle_message(
                 }
                 JsonRpcMethod::CoinSubscribe => {
                     // Cancel any existing subscription
-                    if let ActiveSubscription::Order(handle) | ActiveSubscription::Coin(handle) =
+                    if let ActiveSubscription::Coin(handle) =
                         std::mem::replace(active_subscription, ActiveSubscription::None)
                     {
                         handle.abort();
