@@ -45,6 +45,43 @@ impl NewTokenMessage {
         }
     }
 }
+// #[derive(Debug, Clone, Serialize, Deserialize)]
+// pub struct NewBuyMessage {
+//     pub trader_info: User,
+//     pub coin_info: CreateSwapCoinInfo,
+//     pub nad_amount: String,
+// }
+// impl NewBuyMessage {
+//     pub fn new(order_token: &OrderTokenResponse, trader_info: User, swap: &Swap) -> Self {
+//         NewBuyMessage {
+//             trader_info,
+//             coin_info: CreateSwapCoinInfo {
+//                 symbol: order_token.symbol.clone(),
+//                 image_uri: order_token.image_uri.clone(),
+//             },
+//             nad_amount: swap.nad_amount.to_string(),
+//         }
+//     }
+// }
+
+// #[derive(Debug, Clone, Serialize, Deserialize)]
+// pub struct NewSellMessage {
+//     pub trader_info: User,
+//     pub coin_info: CreateSwapCoinInfo,
+//     pub nad_amount: String,
+// }
+// impl NewSellMessage {
+//     pub fn new(order_token: &OrderTokenResponse, trader_info: User, swap: &Swap) -> Self {
+//         NewSellMessage {
+//             trader_info,
+//             coin_info: CreateSwapCoinInfo {
+//                 symbol: order_token.symbol.clone(),
+//                 image_uri: order_token.image_uri.clone(),
+//             },
+//             nad_amount: swap.nad_amount.to_string(),
+//         }
+//     }
+// }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewSwapMessage {

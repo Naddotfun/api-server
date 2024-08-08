@@ -40,16 +40,27 @@ pub async fn handle_order_subscribe(
         .await
         .context("Failed to get new token")?;
     info!("new_token: {:?}", new_token);
-    let new_swap = state
+    // let new_swap = state
+    //     .redis
+    //     .get_new_swap()
+    //     .await
+    //     .context("Failed to get new_swap")?;
+    let new_buy = state
         .redis
-        .get_new_swap()
+        .get_new_buy()
+        .await
+        .context("Failed to get new_swap")?;
+    let new_sell = state
+        .redis
+        .get_new_sell()
         .await
         .context("Failed to get new_swap")?;
     info!("new_token: {:?}", new_token);
     let message = OrderMessage {
         message_type: SendMessageType::ALL,
         new_token,
-        new_swap,
+        new_buy,
+        new_sell,
         order_type,
         order_token: Some(order),
     };
@@ -97,9 +108,14 @@ pub async fn handle_coin_subscribe(
         .get_new_token()
         .await
         .context("Failed to get new token")?;
-    let new_swap = state
+    let new_buy = state
         .redis
-        .get_new_swap()
+        .get_new_buy()
+        .await
+        .context("Failed to get new_swap")?;
+    let new_sell = state
+        .redis
+        .get_new_sell()
         .await
         .context("Failed to get new_swap")?;
     let coin_page_controller = CoinPageController::new(state.postgres.clone());
@@ -109,7 +125,8 @@ pub async fn handle_coin_subscribe(
     let message = CoinMessage {
         message_type: SendMessageType::ALL,
         new_token,
-        new_swap,
+        new_buy,
+        new_sell,
         coin: coin_data,
     };
     let message_json = serde_json::to_value(message).context("Failed to serialize coin")?;

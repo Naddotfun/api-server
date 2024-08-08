@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::model::{Balance, Chart, Coin, Curve, Swap, Thread};
 
-use super::{order::CreateSwapCoinInfo, CoinAndUserInfo, NewSwapMessage};
-use super::{NewTokenMessage, SendMessageType, User};
+use super::{order::CreateSwapCoinInfo, CoinAndUserInfo};
+use super::{NewSwapMessage, NewTokenMessage, SendMessageType, User};
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct CoinResponse {
@@ -19,7 +19,9 @@ pub struct CoinMessage {
     #[serde(skip)]
     pub message_type: SendMessageType,
     pub new_token: Option<NewTokenMessage>,
-    pub new_swap: Option<NewSwapMessage>,
+    pub new_buy: Option<NewSwapMessage>,
+    pub new_sell: Option<NewSwapMessage>,
+
     pub coin: CoinResponse,
 }
 
@@ -36,7 +38,8 @@ impl CoinMessage {
                 image_uri: info.coin_image_uri,
                 created_at: coin.created_at,
             }),
-            new_swap: None,
+            new_buy: None,
+            new_sell: None,
             coin: CoinResponse {
                 id: coin.id.clone(),
                 swap: None,
@@ -48,28 +51,56 @@ impl CoinMessage {
         }
     }
     pub fn from_swap(swap: Swap, info: CoinAndUserInfo) -> Self {
-        CoinMessage {
-            message_type: SendMessageType::ALL,
-            new_token: None,
-            new_swap: Some(NewSwapMessage {
-                trader_info: User {
-                    nickname: info.user_nickname,
-                    image_uri: info.user_image_uri,
+        match swap.is_buy {
+            true => CoinMessage {
+                message_type: SendMessageType::ALL,
+                new_token: None,
+                new_buy: Some(NewSwapMessage {
+                    trader_info: User {
+                        nickname: info.user_nickname,
+                        image_uri: info.user_image_uri,
+                    },
+                    is_buy: true,
+                    coin_info: CreateSwapCoinInfo {
+                        symbol: info.coin_symbol,
+                        image_uri: info.coin_image_uri,
+                    },
+                    nad_amount: swap.nad_amount.to_string(),
+                }),
+                new_sell: None,
+                coin: CoinResponse {
+                    id: swap.coin_id.clone(),
+                    swap: None,
+                    chart: None,
+                    balance: None,
+                    curve: None,
+                    thread: None,
                 },
-                coin_info: CreateSwapCoinInfo {
-                    symbol: info.coin_symbol,
-                    image_uri: info.coin_image_uri,
+            },
+            false => CoinMessage {
+                message_type: SendMessageType::ALL,
+                new_token: None,
+                new_buy: None,
+                new_sell: Some(NewSwapMessage {
+                    trader_info: User {
+                        nickname: info.user_nickname,
+                        image_uri: info.user_image_uri,
+                    },
+                    is_buy: false,
+                    coin_info: CreateSwapCoinInfo {
+                        symbol: info.coin_symbol,
+                        image_uri: info.coin_image_uri,
+                    },
+                    nad_amount: swap.nad_amount.to_string(),
+                }),
+                coin: CoinResponse {
+                    id: swap.coin_id.clone(),
+                    swap: None,
+                    chart: None,
+                    balance: None,
+                    curve: None,
+                    thread: None,
                 },
-                is_buy: swap.is_buy,
-                nad_amount: swap.nad_amount.to_string(),
-            }),
-            coin: CoinResponse {
-                id: swap.coin_id.clone(),
-                swap: None,
-                chart: None,
-                balance: None,
-                curve: None,
-                thread: None,
             },
         }
     }
@@ -77,7 +108,8 @@ impl CoinMessage {
         CoinMessage {
             message_type: SendMessageType::Regular,
             new_token: None,
-            new_swap: None,
+            new_buy: None,
+            new_sell: None,
             coin: CoinResponse {
                 id: chart.coin_id.clone(),
                 swap: None,
@@ -92,7 +124,8 @@ impl CoinMessage {
         CoinMessage {
             message_type: SendMessageType::Regular,
             new_token: None,
-            new_swap: None,
+            new_buy: None,
+            new_sell: None,
             coin: CoinResponse {
                 id: balance.coin_id.clone(),
                 swap: None,
@@ -107,7 +140,8 @@ impl CoinMessage {
         CoinMessage {
             message_type: SendMessageType::Regular,
             new_token: None,
-            new_swap: None,
+            new_buy: None,
+            new_sell: None,
             coin: CoinResponse {
                 id: curve.coin_id.clone(),
                 swap: None,
@@ -123,7 +157,8 @@ impl CoinMessage {
         CoinMessage {
             message_type: SendMessageType::Regular,
             new_token: None,
-            new_swap: None,
+            new_buy: None,
+            new_sell: None,
             coin: CoinResponse {
                 id: thread.coin_id.clone(),
                 swap: None,

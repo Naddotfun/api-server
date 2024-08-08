@@ -50,7 +50,8 @@ pub struct OrderMessage {
     #[serde(skip)]
     pub message_type: SendMessageType,
     pub new_token: Option<NewTokenMessage>,
-    pub new_swap: Option<NewSwapMessage>,
+    pub new_buy: Option<NewSwapMessage>,
+    pub new_sell: Option<NewSwapMessage>,
     pub order_type: OrderType,
     pub order_token: Option<Vec<OrderTokenResponse>>,
 }

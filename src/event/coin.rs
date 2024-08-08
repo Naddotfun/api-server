@@ -110,15 +110,13 @@ impl CoinEventProducer {
         info!("Coin event capture started");
         while let Some(notification) = stream.next().await {
             if let Ok(notification) = notification {
-                //총 채널이 0이라면 다음 loop 넘어감.
                 if self.total_channels.load(Ordering::Relaxed) == 0 {
                     continue;
                 }
 
                 let payload: Value = serde_json::from_str(&notification.payload())?;
+                let coin_id = payload["coin_id"].as_str().unwrap_or("").to_string();
 
-                let senders = self.coin_senders.read().await;
-                let coin_id = payload["coin_id"].to_string();
                 let event = match notification.channel() {
                     COIN => CoinEvent::Coin(CoinWrapper::parse(payload)?),
                     SWAP => CoinEvent::Swap(SwapWrapper::parse(payload)?),
@@ -129,33 +127,35 @@ impl CoinEventProducer {
                     _ => continue,
                 };
 
-                //event 가 coin,swap 이 아니고 coin_id 에 맞는 channel 이 없으면 continue
-                let should_continue = match &event {
-                    CoinEvent::Coin(_) | CoinEvent::Swap(_) => false,
-                    _ => !senders.contains_key(&coin_id),
+                let senders = self.coin_senders.read().await;
+                let should_process = match &event {
+                    CoinEvent::Coin(_) | CoinEvent::Swap(_) => true,
+                    _ => senders.contains_key(&coin_id),
                 };
 
-                if should_continue {
-                    continue;
-                }
+                if should_process {
+                    info!(
+                        "Processing event for coin_id: {}, event: {:?}",
+                        coin_id, event
+                    );
+                    let messages = self.handle_event(event).await?;
 
-                let messages = self.handle_event(event).await?;
-                debug!("Coin event {:?}", messages);
-                for message in messages {
-                    match message.message_type {
-                        SendMessageType::ALL => {
-                            // Broadcast to all connected users
-                            for (_, sender) in senders.iter() {
-                                let _ = sender.0.send(message.clone());
+                    for message in messages {
+                        match message.message_type {
+                            SendMessageType::ALL => {
+                                for (_, sender) in senders.iter() {
+                                    let _ = sender.0.send(message.clone());
+                                }
                             }
-                        }
-                        SendMessageType::Regular => {
-                            // Send only to subscribers of this coin
-                            if let Some(sender) = senders.get(&message.coin.id) {
-                                let _ = sender.0.send(message);
+                            SendMessageType::Regular => {
+                                if let Some(sender) = senders.get(&message.coin.id) {
+                                    let _ = sender.0.send(message);
+                                }
                             }
                         }
                     }
+                } else {
+                    info!("Skipping event for coin_id: {}, no subscribers", coin_id);
                 }
             }
         }
@@ -174,6 +174,7 @@ impl CoinEventProducer {
         }
     }
     async fn handle_coin_event(&self, coin: Coin) -> Result<Vec<CoinMessage>> {
+        info!("Handling coin event {:?}", coin);
         let message_controller = MessageController::new(self.db.clone());
         let info = message_controller
             .get_coin_and_user_info(&coin.id, &coin.creator)
@@ -182,6 +183,7 @@ impl CoinEventProducer {
         Ok(vec![CoinMessage::from_coin(coin, info)])
     }
     async fn handle_swap_event(&self, swap: Swap) -> Result<Vec<CoinMessage>> {
+        info!("Handling swap event {:?}", swap);
         let message_controller = MessageController::new(self.db.clone());
         let info = message_controller
             .get_coin_and_user_info(&swap.coin_id, &swap.sender)
@@ -192,35 +194,47 @@ impl CoinEventProducer {
 
     async fn handle_chart_event(&self, chart: Chart) -> Result<Vec<CoinMessage>> {
         // Chart 이벤트 처리 로직
+        // info!("Handling chart event {:?}", chart);
         Ok(vec![CoinMessage::from_chart(chart)])
     }
 
     async fn handle_balance_event(&self, balance: Balance) -> Result<Vec<CoinMessage>> {
+        // info!("Handling balance event {:?}", balance);
         // Balance 이벤트 처리 로직
         Ok(vec![CoinMessage::from_balance(balance)])
     }
 
     async fn handle_curve_event(&self, curve: Curve) -> Result<Vec<CoinMessage>> {
+        // info!("Handling curve event {:?}", curve);
         // Curve 이벤트 처리 로직
         Ok(vec![CoinMessage::from_curve(curve)])
     }
 
     async fn handle_thread_event(&self, thread: Thread) -> Result<Vec<CoinMessage>> {
+        // info!("Handling thread event {:?}", thread);
         // Thread 이벤트 처리 로직
         Ok(vec![CoinMessage::from_thread(thread)])
     }
+
     pub async fn get_coin_receiver(&self, coin_id: &str) -> CoinReceiver {
         let mut senders = self.coin_senders.write().await;
         let (sender, count) = senders.entry(coin_id.to_string()).or_insert_with(|| {
-            self.total_channels.fetch_add(1, Ordering::SeqCst);
+            let new_count = self.total_channels.fetch_add(1, Ordering::SeqCst) + 1;
+            info!(
+                "Creating new channel for coin_id: {}. Total channels: {}",
+                coin_id, new_count
+            );
             (broadcast::channel(100).0, 0)
         });
 
         *count += 1;
         info!(
-            "Incrementing count for coin_id: {} count ={}",
-            coin_id, count
+            "Incrementing count for coin_id: {}. New count: {}. Total channels: {}",
+            coin_id,
+            count,
+            self.total_channels.load(Ordering::SeqCst)
         );
+
         CoinReceiver {
             receiver: sender.subscribe(),
             coin_id: coin_id.to_string(),

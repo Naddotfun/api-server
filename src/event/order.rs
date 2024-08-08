@@ -341,7 +341,8 @@ impl OrderEventProducer {
         let message = OrderMessage {
             message_type: SendMessageType::ALL,
             new_token: Some(new_token),
-            new_swap: None,
+            new_buy: None,
+            new_sell: None,
             order_type: OrderType::CreationTime,
             order_token: Some(vec![order_token_response]),
         };
@@ -368,13 +369,41 @@ impl OrderEventProducer {
             .set_new_swap(&new_swap_message)
             .await
             .context("Failed Set New Swap")?;
-        let message = OrderMessage {
-            message_type: SendMessageType::ALL,
-            new_token: None,
-            new_swap: Some(new_swap_message),
-            order_type: OrderType::Bump,
-            order_token: Some(vec![order_token_response.clone()]),
+        let message = match new_swap_message.is_buy {
+            true => {
+                let message = OrderMessage {
+                    message_type: SendMessageType::ALL,
+                    new_token: None,
+                    new_buy: Some(new_swap_message),
+                    new_sell: None,
+                    // new_swap: Some(new_swap_message),
+                    order_type: OrderType::Bump,
+                    order_token: Some(vec![order_token_response.clone()]),
+                };
+                message
+            }
+            false => {
+                let message = OrderMessage {
+                    message_type: SendMessageType::ALL,
+                    new_token: None,
+                    new_buy: None,
+                    new_sell: Some(new_swap_message),
+                    // new_swap: Some(new_swap_message),
+                    order_type: OrderType::Bump,
+                    order_token: Some(vec![order_token_response.clone()]),
+                };
+                message
+            }
         };
+        // let message = OrderMessage {
+        //     message_type: SendMessageType::ALL,
+        //     new_token: None,
+        //     new_buy: None,
+        //     new_sell: None,
+        //     // new_swap: Some(new_swap_message),
+        //     order_type: OrderType::Bump,
+        //     order_token: Some(vec![order_token_response.clone()]),
+        // };
         Ok(vec![message])
     }
 
@@ -388,7 +417,8 @@ impl OrderEventProducer {
                 let message = OrderMessage {
                     message_type: SendMessageType::Regular,
                     new_token: None,
-                    new_swap: None,
+                    new_buy: None,
+                    new_sell: None,
                     order_type: OrderType::MarketCap,
                     order_token: Some(vec![coin]),
                 };
@@ -415,7 +445,8 @@ impl OrderEventProducer {
             messages.push(OrderMessage {
                 message_type: SendMessageType::Regular,
                 new_token: None,
-                new_swap: None,
+                new_buy: None,
+                new_sell: None,
                 order_type: OrderType::LatestReply,
                 order_token: Some(vec![last_reply_coin]),
             });
@@ -425,7 +456,8 @@ impl OrderEventProducer {
             messages.push(OrderMessage {
                 message_type: SendMessageType::Regular,
                 new_token: None,
-                new_swap: None,
+                new_buy: None,
+                new_sell: None,
                 order_type: OrderType::ReplyCount,
                 order_token: Some(vec![reply_count_coin]),
             });

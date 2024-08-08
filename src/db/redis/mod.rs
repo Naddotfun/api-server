@@ -22,7 +22,8 @@ lazy_static! {
     static ref MARKET_CAP_ORDER_KEY: &'static str = "market_cap_order";
     static ref CREATION_TIME_ORDER_KEY: &'static str = "creation_time_order";
     static ref NEW_TOKEN_KEY: &'static str = "new_token";
-    static ref NEW_SWAP_KEY: &'static str = "new_swap";
+    static ref NEW_BUY_KEY: &'static str = "new_buy";
+    static ref NEW_SELL_KEY: &'static str = "new_sell";
 }
 pub struct RedisDatabase {
     pub client: Client,
@@ -290,13 +291,17 @@ impl RedisDatabase {
             ))
         })?;
         info!("Setting new swap: {:?}", value);
-        conn.set::<_, _, ()>(*NEW_SWAP_KEY, value).await?;
+        match new_swap.is_buy {
+            true => conn.set::<_, _, ()>(*NEW_BUY_KEY, value).await?,
+            false => conn.set::<_, _, ()>(*NEW_SELL_KEY, value).await?,
+        }
+
         Ok(())
     }
 
-    pub async fn get_new_swap(&self) -> Result<Option<NewSwapMessage>> {
+    pub async fn get_new_buy(&self) -> Result<Option<NewSwapMessage>> {
         let mut conn = self.client.get_multiplexed_async_connection().await?;
-        let value: Option<String> = conn.get(*NEW_SWAP_KEY).await?;
+        let value: Option<String> = conn.get(*NEW_BUY_KEY).await?;
         match value {
             Some(v) => {
                 let new_swap = serde_json::from_str(&v).context("Failed to parse new swap")?;
@@ -305,4 +310,27 @@ impl RedisDatabase {
             None => Ok(None),
         }
     }
+
+    pub async fn get_new_sell(&self) -> Result<Option<NewSwapMessage>> {
+        let mut conn = self.client.get_multiplexed_async_connection().await?;
+        let value: Option<String> = conn.get(*NEW_SELL_KEY).await?;
+        match value {
+            Some(v) => {
+                let new_swap = serde_json::from_str(&v).context("Failed to parse new swap")?;
+                Ok(Some(new_swap))
+            }
+            None => Ok(None),
+        }
+    }
+    // pub async fn get_new_swap(&self) -> Result<Option<NewSwapMessage>> {
+    //     let mut conn = self.client.get_multiplexed_async_connection().await?;
+    //     let value: Option<String> = conn.get(*NEW_SWAP_KEY).await?;
+    //     match value {
+    //         Some(v) => {
+    //             let new_swap = serde_json::from_str(&v).context("Failed to parse new swap")?;
+    //             Ok(Some(new_swap))
+    //         }
+    //         None => Ok(None),
+    //     }
+    // }
 }
