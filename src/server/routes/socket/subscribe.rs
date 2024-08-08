@@ -10,8 +10,9 @@ use tracing::error;
 use tracing::info;
 
 use crate::db::postgres::controller::coinpage::CoinPageController;
-use crate::db::postgres::controller::message;
+
 use crate::server::state::AppState;
+use crate::types::chart_type::ChartType;
 use crate::types::event::coin_message::CoinMessage;
 use crate::types::event::order::OrderMessage;
 use crate::types::event::order::OrderType;
@@ -95,6 +96,11 @@ pub async fn handle_coin_subscribe(
 ) -> Result<JoinHandle<()>> {
     let coin_id = parse_coin_id(request.params())
         .ok_or_else(|| anyhow::anyhow!("Invalid or missing coin ID"))?;
+    let chart_type = ChartType::from_str(
+        &parse_chart(request.params())
+            .ok_or_else(|| anyhow::anyhow!("Invalid or missing chart"))?,
+    )
+    .map_err(|e| anyhow::anyhow!("Failed to parse chart type: {}", e))?;
 
     let mut receiver = state.coin_event_producer.get_coin_receiver(&coin_id).await;
 
@@ -120,7 +126,9 @@ pub async fn handle_coin_subscribe(
         .context("Failed to get new_swap")?;
     let coin_page_controller = CoinPageController::new(state.postgres.clone());
 
-    let coin_data = coin_page_controller.get_coin_message(&coin_id).await?;
+    let coin_data = coin_page_controller
+        .get_coin_message(&coin_id, chart_type)
+        .await?;
     info!("coin_data _ price {:?}", coin_data.curve);
     let message = CoinMessage {
         message_type: SendMessageType::ALL,
@@ -130,12 +138,7 @@ pub async fn handle_coin_subscribe(
         coin: coin_data,
     };
     let message_json = serde_json::to_value(message).context("Failed to serialize coin")?;
-    send_success_response(
-        &tx,
-        request.method(),
-        json!({"status": "subscribed","data": message_json}),
-    )
-    .await?;
+    send_success_response(&tx, request.method(), json!(message_json)).await?;
 
     let handle = tokio::spawn(async move {
         while let Some(event) = receiver.recv().await {
@@ -167,6 +170,17 @@ fn parse_coin_id(params: Option<&Value>) -> Option<String> {
         Some(Value::String(s)) => Some(s.clone()),
         Some(Value::Object(obj)) => obj
             .get("coin_id")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_owned()),
+        _ => None,
+    }
+}
+
+fn parse_chart(params: Option<&Value>) -> Option<String> {
+    match params {
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(Value::Object(obj)) => obj
+            .get("chart")
             .and_then(|v| v.as_str())
             .map(|s| s.to_owned()),
         _ => None,
