@@ -11,7 +11,7 @@ use crate::{
     constant::change_channels::{COIN, COIN_REPLIES_COUNT, CURVE, SWAP},
     db::{
         postgres::{
-            controller::{message::MessageController, order::OrderController},
+            controller::{info::InfoController, order::OrderController},
             PostgresDatabase,
         },
         redis::RedisDatabase,
@@ -140,6 +140,7 @@ impl OrderEventProducer {
             OrderType::ReplyCount => self.redis.set_reply_count_order(coins).await?,
             OrderType::LatestReply => self.redis.set_last_reply_order(coins).await?,
         }
+
         // info!("Set event for {:?}", order_type);
         Ok(())
     }
@@ -350,8 +351,6 @@ impl OrderEventProducer {
     }
 
     async fn handle_bump_order(&self, swap: Swap) -> Result<Vec<OrderMessage>> {
-        info!("handle_bump_order swap {:?}", swap);
-
         //timestamp 때문에 그렇나?
         let order_token_response = self
             .add_bump_order(self.db.clone(), swap.clone())
@@ -360,9 +359,9 @@ impl OrderEventProducer {
             .ok_or_else(|| {
                 anyhow::anyhow!("Failed to add coin, which should never happen for bump order")
             })?;
-        info!("handle_bump_order coin {:?}", order_token_response);
-        let message_controller = MessageController::new(self.db.clone());
-        let trader_info = message_controller.get_user(&swap.sender).await?;
+
+        let info_controller = InfoController::new(self.db.clone());
+        let trader_info = info_controller.get_user(&swap.sender).await?;
 
         let new_swap_message = NewSwapMessage::new(&order_token_response, trader_info, &swap);
         self.redis
@@ -376,7 +375,7 @@ impl OrderEventProducer {
                     new_token: None,
                     new_buy: Some(new_swap_message),
                     new_sell: None,
-                    // new_swap: Some(new_swap_message),
+
                     order_type: OrderType::Bump,
                     order_token: Some(vec![order_token_response.clone()]),
                 };
@@ -395,15 +394,7 @@ impl OrderEventProducer {
                 message
             }
         };
-        // let message = OrderMessage {
-        //     message_type: SendMessageType::ALL,
-        //     new_token: None,
-        //     new_buy: None,
-        //     new_sell: None,
-        //     // new_swap: Some(new_swap_message),
-        //     order_type: OrderType::Bump,
-        //     order_token: Some(vec![order_token_response.clone()]),
-        // };
+
         Ok(vec![message])
     }
 

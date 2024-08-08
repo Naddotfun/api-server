@@ -24,6 +24,7 @@ pub struct Coin {
 #[derive(Debug, Clone, Deserialize, Serialize, sqlx::FromRow)]
 pub struct Curve {
     pub id: String,
+
     pub coin_id: String,
     pub virtual_nad: BigDecimal,
     pub virtual_token: BigDecimal,
@@ -47,6 +48,7 @@ pub struct Swap {
 #[derive(Debug, Clone, Deserialize, Serialize, sqlx::FromRow)]
 pub struct Chart {
     //id = 읽어오기 위해서 임의로 생성
+    #[serde(skip)]
     pub id: i32,
     pub coin_id: String,
     pub open_price: BigDecimal,
@@ -83,27 +85,26 @@ pub struct AccountSession {
 
 #[derive(Debug, Clone, Deserialize, Serialize, sqlx::FromRow, ToSchema)]
 pub struct Thread {
-    #[serde(rename = "id")]
     pub id: i32,
-    #[serde(rename = "coinId")]
+
     pub coin_id: String,
-    #[serde(rename = "authorId")]
+
     pub author_id: String,
-    #[serde(rename = "content")]
+
     pub content: String,
-    #[serde(rename = "createdAt")]
+
     #[schema(value_type = String, example = "2023-06-01T12:00:00Z")]
     pub created_at: DateTime<Utc>,
-    #[serde(rename = "updatedAt")]
+
     #[schema(value_type = String, example = "2023-06-01T12:00:00Z")]
     pub updated_at: DateTime<Utc>,
-    #[serde(rename = "rootId")]
+
     pub root_id: Option<i32>,
-    #[serde(rename = "likesCount")]
+
     pub likes_count: i32,
-    #[serde(rename = "replyCount")]
+
     pub reply_count: i32,
-    #[serde(rename = "imageUri")]
+
     pub image_uri: Option<String>,
 }
 

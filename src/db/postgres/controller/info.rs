@@ -7,15 +7,14 @@ use crate::{
     types::event::{order::CreateSwapCoinInfo, CoinAndUserInfo, User},
 };
 
-pub struct MessageController {
+pub struct InfoController {
     pub db: Arc<PostgresDatabase>,
 }
 
-impl MessageController {
+impl InfoController {
     pub fn new(db: Arc<PostgresDatabase>) -> Self {
-        MessageController { db }
+        InfoController { db }
     }
-
     pub async fn get_user(&self, account_id: &str) -> Result<User> {
         let creator = sqlx::query_as!(
             User,
@@ -27,7 +26,6 @@ impl MessageController {
         .await?;
         Ok(creator)
     }
-
     pub async fn get_coin_info(&self, coin_id: &str) -> Result<CreateSwapCoinInfo> {
         let coin_info = sqlx::query_as!(
             CreateSwapCoinInfo,

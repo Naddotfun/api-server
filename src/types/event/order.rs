@@ -3,7 +3,7 @@ use std::str::FromStr;
 use super::{NewSwapMessage, NewTokenMessage, SendMessageType, User};
 use crate::types::model::{Coin, CoinReplyCount, Curve, Swap};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+
 use sqlx::FromRow;
 use utoipa::ToSchema;
 #[derive(Debug, Clone, Serialize)]

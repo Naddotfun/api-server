@@ -10,10 +10,12 @@ pub struct CoinWrapper {
     pub coin_id: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChartWrapper {
     pub record: Chart,
+
     pub chart_type: String,
+
     pub coin_id: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -80,10 +82,10 @@ impl ReplyCountWrapper {
 }
 
 impl ChartWrapper {
-    pub fn parse(value: Value) -> Result<Chart> {
+    pub fn parse(value: Value) -> Result<ChartWrapper> {
         let chart =
             serde_json::from_value::<ChartWrapper>(value).context("Fail Deserialize chart")?;
-        Ok(chart.record)
+        Ok(chart)
     }
 }
 

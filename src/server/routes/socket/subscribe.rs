@@ -5,14 +5,17 @@ use anyhow::Result;
 use axum::extract::ws::Message;
 use serde_json::json;
 use serde_json::Value;
+use tokio::sync::broadcast::error::RecvError;
 use tokio::{sync::mpsc::Sender, task::JoinHandle};
 use tracing::error;
 use tracing::info;
+use tracing::warn;
 
 use crate::db::postgres::controller::coinpage::CoinPageController;
 
 use crate::server::state::AppState;
 
+use crate::types::chart_type::ChartType;
 use crate::types::event::coin_message::CoinMessage;
 use crate::types::event::order::OrderMessage;
 use crate::types::event::order::OrderType;
@@ -96,12 +99,12 @@ pub async fn handle_coin_subscribe(
 ) -> Result<JoinHandle<()>> {
     let coin_id = parse_coin_id(request.params())
         .ok_or_else(|| anyhow::anyhow!("Invalid or missing coin ID"))?;
-    // let chart_type = ChartType::from_str(
-    //     &parse_chart(request.params())
-    //         .ok_or_else(|| anyhow::anyhow!("Invalid or missing chart"))?,
-    // )
-    // .map_err(|e| anyhow::anyhow!("Failed to parse chart type: {}", e))?;
-
+    let chart_type = ChartType::from_str(
+        &parse_chart(request.params())
+            .ok_or_else(|| anyhow::anyhow!("Invalid or missing chart"))?,
+    )
+    .map_err(|e| anyhow::anyhow!("Failed to parse chart type: {}", e))?;
+    info!("Chart type ={:?}", chart_type);
     let mut receiver = state.coin_event_producer.get_coin_receiver(&coin_id).await;
 
     //이제 여기서 부터 coin 에 대한 데이터를 가지고 와서 보내주는 코드 작성해야함.
@@ -126,8 +129,10 @@ pub async fn handle_coin_subscribe(
         .context("Failed to get new_swap")?;
     let coin_page_controller = CoinPageController::new(state.postgres.clone());
 
-    let coin_data = coin_page_controller.get_coin_message(&coin_id).await?;
-    info!("coin_data _ price {:?}", coin_data.curve);
+    let coin_data = coin_page_controller
+        .get_coin_message(&coin_id, chart_type.clone())
+        .await?;
+
     let message = CoinMessage {
         message_type: SendMessageType::ALL,
         new_token,
@@ -138,17 +143,52 @@ pub async fn handle_coin_subscribe(
     let message_json = serde_json::to_value(message).context("Failed to serialize coin")?;
     send_success_response(&tx, request.method(), json!(message_json)).await?;
 
+    // 메시지 수신 부분
     let handle = tokio::spawn(async move {
-        while let Some(event) = receiver.recv().await {
-            if let Err(e) = send_success_response(&tx, request.method(), json!(event)).await {
-                error!("Failed to send coin event: {:?}", e);
-                break;
+        loop {
+            match receiver.recv().await {
+                Ok(message) => {
+                    info!("Received message for coin_id: {}", message.coin.id);
+
+                    if let Some(chart_vec) = &message.coin.chart {
+                        if !chart_vec.is_empty() {
+                            let message_chart_type = ChartType::from_str(&chart_vec[0].chart_type)
+                                .map_err(|e| {
+                                    warn!("Invalid chart type: {}", e);
+                                    e
+                                })
+                                .ok();
+                            let chart_type = chart_type.clone();
+                            if message_chart_type.as_ref() != Some(&chart_type) {
+                                info!("Skipping message due to chart_type mismatch");
+                                continue;
+                            }
+                        }
+                    }
+
+                    if let Err(e) =
+                        send_success_response(&tx, request.method(), json!(message)).await
+                    {
+                        error!("Failed to send coin event: {:?}", e);
+                        // 여기서 재시도 로직 추가 가능
+                    }
+                }
+                Err(e) => {
+                    match e {
+                        RecvError::Closed => {
+                            // info!("Channel closed for coin_id: {}", coin_id.clone());
+                            break;
+                        }
+                        RecvError::Lagged(skipped) => {
+                            // warn!("Lagged {} messages for coin_id: {}", skipped, coin_id);
+                            // 여기서 복구 로직 추가 가능
+                        }
+                    }
+                }
             }
         }
-        // Ensure receiver is dropped here
-        drop(receiver);
     });
-
+    info!("Receiver loop ended for coin_id: {}", coin_id);
     Ok(handle)
 }
 

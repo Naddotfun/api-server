@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 use crate::types::model::{Balance, Chart, Coin, Curve, Swap, Thread};
 
+use super::wrapper::ChartWrapper;
 use super::{order::CreateSwapCoinInfo, CoinAndUserInfo};
 use super::{NewSwapMessage, NewTokenMessage, SendMessageType, User};
 
@@ -9,11 +11,12 @@ use super::{NewSwapMessage, NewTokenMessage, SendMessageType, User};
 pub struct CoinResponse {
     pub id: String,
     pub swap: Option<Vec<Swap>>,
-    pub chart: Option<Vec<Chart>>,
+    pub chart: Option<Vec<ChartWrapper>>,
     pub balance: Option<Vec<Balance>>,
     pub curve: Option<Curve>,
     pub thread: Option<Vec<Thread>>,
 }
+
 #[derive(Debug, Clone, Serialize)]
 pub struct CoinMessage {
     #[serde(skip)]
@@ -21,7 +24,6 @@ pub struct CoinMessage {
     pub new_token: Option<NewTokenMessage>,
     pub new_buy: Option<NewSwapMessage>,
     pub new_sell: Option<NewSwapMessage>,
-
     pub coin: CoinResponse,
 }
 
@@ -104,7 +106,8 @@ impl CoinMessage {
             },
         }
     }
-    pub fn from_chart(chart: Chart) -> Self {
+    pub fn from_chart(chart: ChartWrapper) -> Self {
+        assert!(!chart.coin_id.is_empty(), "Chart coin_id is empty");
         CoinMessage {
             message_type: SendMessageType::Regular,
             new_token: None,
