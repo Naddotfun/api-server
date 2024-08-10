@@ -12,8 +12,8 @@ where
     S: Serializer,
 {
     info!("x = {:?}", x.to_string());
-    let rounded = x.round(9);
-    let rounded = x.with_scale(10);
+
+    let rounded = x.round(9).with_scale(10);
     info!("rounded = {:?}", rounded.to_string());
 
     let format = rounded.to_f64().unwrap_or(0.0).to_string();
