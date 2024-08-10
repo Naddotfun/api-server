@@ -4,22 +4,22 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize, Serializer};
 use sqlx::types::BigDecimal;
 
+use tracing::info;
 use utoipa::ToSchema;
 
 fn serialize_bigdecimal<S>(x: &BigDecimal, s: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
-    // Convert to f64 for formatting
-    let f64_val = x.to_f64().unwrap_or(0.0);
+    info!("x = {:?}", x.to_string());
+    let rounded = x.round(9);
+    let rounded = x.with_scale(10);
+    info!("rounded = {:?}", rounded.to_string());
 
-    // Format with 9 decimal places, which should be sufficient for most cases
-    let formatted = format!("{:.9}", f64_val);
+    let format = rounded.to_f64().unwrap_or(0.0).to_string();
+    info!("f64_val: {}", format);
 
-    // Remove trailing zeros after the decimal point
-    let trimmed = formatted.trim_end_matches('0').trim_end_matches('.');
-
-    s.serialize_str(trimmed)
+    s.serialize_str(&format)
 }
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
 pub struct Coin {
