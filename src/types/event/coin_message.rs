@@ -107,7 +107,6 @@ impl CoinMessage {
         }
     }
     pub fn from_chart(chart: ChartWrapper) -> Self {
-        assert!(!chart.coin_id.is_empty(), "Chart coin_id is empty");
         CoinMessage {
             message_type: SendMessageType::Regular,
             new_token: None,

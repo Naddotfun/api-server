@@ -13,9 +13,7 @@ pub struct CoinWrapper {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChartWrapper {
     pub record: Chart,
-
     pub chart_type: String,
-
     pub coin_id: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -158,8 +158,8 @@ impl CoinEventProducer {
                                     );
                                     match sender.0.send(message.clone()) {
                                         Ok(_) => info!(
-                                            "Regular message sent successfully for coin_id: {}",
-                                            message.coin.id
+                                            "Regular message sent successfully for coin_id: {:?}",
+                                            message
                                         ),
                                         Err(e) => warn!(
                                             "Failed to send Regular message for coin_id: {}: {:?}",

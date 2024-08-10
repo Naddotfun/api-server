@@ -1,11 +1,13 @@
-use anyhow::{Context, Result};
-use serde_json::Value;
-use std::sync::Arc;
-
+use crate::types::event::wrapper::ChartWrapper;
+use crate::types::model::Chart;
 use crate::{
     db::postgres::PostgresDatabase,
     types::{chart_type::ChartType, event::coin_message::CoinResponse},
 };
+use anyhow::{Context, Result};
+use serde_json::Value;
+use std::sync::Arc;
+use tracing::info;
 #[derive(sqlx::FromRow)]
 struct CoinResponseRaw {
     swap: Option<Value>,
@@ -55,11 +57,25 @@ impl CoinPageController {
             .fetch_one(&self.db.pool)
             .await
             .context("Failed to fetch coin data")?;
+        // info!("Raw chart is :{:?}", raw.chart);
+        let chart = raw
+            .chart
+            .and_then(|v| serde_json::from_value::<Vec<Chart>>(v).ok())
+            .map(|charts| {
+                charts
+                    .into_iter()
+                    .map(|chart| ChartWrapper {
+                        record: chart,
+                        chart_type: chart_type.to_string(),
+                        coin_id: coin_id.to_string(),
+                    })
+                    .collect::<Vec<ChartWrapper>>()
+            });
 
         Ok(CoinResponse {
             id: coin_id.to_string(),
             swap: raw.swap.and_then(|v| serde_json::from_value(v).ok()),
-            chart: raw.chart.and_then(|v| serde_json::from_value(v).ok()),
+            chart,
             balance: raw.balance.and_then(|v| serde_json::from_value(v).ok()),
             curve: raw.curve.and_then(|v| serde_json::from_value(v).ok()),
             thread: raw.thread.and_then(|v| serde_json::from_value(v).ok()),

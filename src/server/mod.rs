@@ -1,6 +1,7 @@
 pub mod result;
 pub mod routes;
 pub mod state;
+
 use std::{
     net::{IpAddr, SocketAddr},
     str::FromStr,
@@ -17,7 +18,7 @@ use axum::{
     BoxError, Router,
 };
 
-use bigdecimal::BigDecimal;
+
 use routes::{
     profile::{
         self,
@@ -27,7 +28,7 @@ use routes::{
         },
     },
     search::{self, handler::SearchResponse},
-    socket,
+    socket
 };
 
 use state::AppState;
@@ -101,7 +102,9 @@ pub async fn main(
         .merge(socket::router())
         .merge(search::router())
         .merge(profile::router())
+        // .merge(test::router())
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
+        
         .layer(
             ServiceBuilder::new()
                 .layer(HandleErrorLayer::new(handle_timeout_error))

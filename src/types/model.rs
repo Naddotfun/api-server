@@ -1,9 +1,26 @@
-// use bigdecimal::BigDecimal;
+// use bigDecimal::BigDecimal;
+use bigdecimal::ToPrimitive;
 use chrono::{DateTime, Utc};
-
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use sqlx::types::BigDecimal;
+
 use utoipa::ToSchema;
+
+fn serialize_bigdecimal<S>(x: &BigDecimal, s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    // Convert to f64 for formatting
+    let f64_val = x.to_f64().unwrap_or(0.0);
+
+    // Format with 9 decimal places, which should be sufficient for most cases
+    let formatted = format!("{:.9}", f64_val);
+
+    // Remove trailing zeros after the decimal point
+    let trimmed = formatted.trim_end_matches('0').trim_end_matches('.');
+
+    s.serialize_str(trimmed)
+}
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
 pub struct Coin {
     pub id: String,
@@ -21,14 +38,16 @@ pub struct Coin {
     pub is_updated: bool,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Curve {
     pub id: String,
-
     pub coin_id: String,
+
     pub virtual_nad: BigDecimal,
+
     pub virtual_token: BigDecimal,
     pub latest_trade_at: i64,
+    #[serde(serialize_with = "serialize_bigdecimal")]
     pub price: BigDecimal,
     pub created_at: i64,
 }
@@ -45,15 +64,18 @@ pub struct Swap {
     pub transaction_hash: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
 pub struct Chart {
     //id = 읽어오기 위해서 임의로 생성
-    #[serde(skip)]
     pub id: i32,
     pub coin_id: String,
+    #[serde(serialize_with = "serialize_bigdecimal")]
     pub open_price: BigDecimal,
+    #[serde(serialize_with = "serialize_bigdecimal")]
     pub close_price: BigDecimal,
+    #[serde(serialize_with = "serialize_bigdecimal")]
     pub high_price: BigDecimal,
+    #[serde(serialize_with = "serialize_bigdecimal")]
     pub low_price: BigDecimal,
     pub created_at: i64,
 }

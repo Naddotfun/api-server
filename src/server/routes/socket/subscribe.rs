@@ -160,7 +160,6 @@ pub async fn handle_coin_subscribe(
                                 .ok();
                             let chart_type = chart_type.clone();
                             if message_chart_type.as_ref() != Some(&chart_type) {
-                                info!("Skipping message due to chart_type mismatch");
                                 continue;
                             }
                         }
@@ -170,20 +169,10 @@ pub async fn handle_coin_subscribe(
                         send_success_response(&tx, request.method(), json!(message)).await
                     {
                         error!("Failed to send coin event: {:?}", e);
-                        // 여기서 재시도 로직 추가 가능
                     }
                 }
                 Err(e) => {
-                    match e {
-                        RecvError::Closed => {
-                            // info!("Channel closed for coin_id: {}", coin_id.clone());
-                            break;
-                        }
-                        RecvError::Lagged(skipped) => {
-                            // warn!("Lagged {} messages for coin_id: {}", skipped, coin_id);
-                            // 여기서 복구 로직 추가 가능
-                        }
-                    }
+                    error!("Failed to receive coin event: {:?}", e);
                 }
             }
         }
