@@ -11,6 +11,7 @@ use super::{NewSwapMessage, NewTokenMessage, SendMessageType, UserInfo};
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct CoinResponse {
     pub id: String,
+    #[serde(rename = "swaps")]
     pub swap: Option<Vec<Swap>>,
     #[serde(rename = "charts")]
     pub chart: Option<Vec<ChartWrapper>>,
@@ -77,7 +78,7 @@ impl CoinMessage {
                 new_sell: None,
                 coin: CoinResponse {
                     id: swap.coin_id.clone(),
-                    swap: None,
+                    swap: Some(vec![swap]),
                     chart: None,
                     balance: None,
                     curve: None,
@@ -102,7 +103,7 @@ impl CoinMessage {
                 }),
                 coin: CoinResponse {
                     id: swap.coin_id.clone(),
-                    swap: None,
+                    swap: Some(vec![swap]),
                     chart: None,
                     balance: None,
                     curve: None,
