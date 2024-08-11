@@ -39,7 +39,7 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
     db::{postgres::PostgresDatabase, redis::RedisDatabase},
-    event::{coin::CoinEventProducer, order::OrderEventProducer},
+    event::{coin::CoinEventProducer, new_content::NewContentEventProducer, order::OrderEventProducer},
     types::{
         event::order::OrderTokenResponse,
         model::{Account, Coin, Thread},
@@ -88,6 +88,7 @@ pub async fn main(
     redis: Arc<RedisDatabase>,
     order_event_producer: Arc<OrderEventProducer>,
     coin_event_producer: Arc<CoinEventProducer>,
+    new_content_producer:Arc<NewContentEventProducer>
 ) -> Result<()> {
     let ip = std::env::var("IP").unwrap();
     let port = std::env::var("PORT").unwrap();
@@ -96,6 +97,7 @@ pub async fn main(
         redis,
         order_event_producer,
         coin_event_producer,
+        new_content_producer
     };
     let app = Router::new()
         .route("/", get(|| async { "Hello, World!" }))

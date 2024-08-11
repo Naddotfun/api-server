@@ -24,7 +24,10 @@ use tokio::{
 use tracing::{error, info};
 
 use crate::server::{
-    routes::socket::json_rpc::{send_error_response, JsonRpcErrorCode},
+    routes::socket::{
+        json_rpc::{send_error_response, JsonRpcErrorCode},
+        subscribe::handle_new_content_subscribe,
+    },
     state::AppState,
 };
 
@@ -35,6 +38,7 @@ use super::{
 enum ActiveSubscription {
     Order(JoinHandle<()>),
     Coin(JoinHandle<()>),
+    NewContent(JoinHandle<()>),
     None,
 }
 pub async fn ws_handler(
@@ -49,9 +53,7 @@ pub async fn ws_handler(
     } else {
         String::from("Unknown browser")
     };
-    println!("`{user_agent}` at {addr} connected.");
-    // finalize the upgrade process by returning upgrade callback.
-    // we can customize the callback by sending additional info such as address.
+
     ws.on_upgrade(move |socket| handle_socket(socket, addr, state))
 }
 
@@ -87,8 +89,9 @@ pub async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState)
             }
         }
         // Cancel the active subscription if any
-        if let ActiveSubscription::Order(handle) | ActiveSubscription::Coin(handle) =
-            active_subscription
+        if let ActiveSubscription::Order(handle)
+        | ActiveSubscription::Coin(handle)
+        | ActiveSubscription::NewContent(handle) = active_subscription
         {
             handle.abort();
         }
@@ -115,10 +118,11 @@ async fn handle_message(
 ) -> Result<()> {
     match msg {
         Message::Text(text) => {
+            info!("Received message: {}", text);
             let request: JsonRpcRequest =
                 serde_json::from_str(&text).context("Failed to parse JSON-RPC request")?;
             //request 를 method 로 바꿔보자.
-
+            info!("Request: {:?}", request);
             match request.method() {
                 JsonRpcMethod::OrderSubscribe => {
                     // Cancel any existing subscription
@@ -140,6 +144,17 @@ async fn handle_message(
                     }
                     let new_handle = handle_coin_subscribe(request, state, tx.clone()).await?;
                     *active_subscription = ActiveSubscription::Coin(new_handle);
+                    Ok(())
+                }
+                JsonRpcMethod::NewContentSubscribe => {
+                    if let ActiveSubscription::NewContent(handle) =
+                        std::mem::replace(active_subscription, ActiveSubscription::None)
+                    {
+                        handle.abort();
+                    }
+                    let new_handle =
+                        handle_new_content_subscribe(request, state, tx.clone()).await?;
+                    *active_subscription = ActiveSubscription::NewContent(new_handle);
                     Ok(())
                 }
                 _ => {

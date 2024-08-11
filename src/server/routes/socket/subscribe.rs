@@ -17,12 +17,54 @@ use crate::server::state::AppState;
 
 use crate::types::chart_type::ChartType;
 use crate::types::event::coin_message::CoinMessage;
+use crate::types::event::new_content::NewContentMessage;
 use crate::types::event::order::OrderMessage;
 use crate::types::event::order::OrderType;
+use crate::types::event::NewSwapMessage;
+use crate::types::event::NewTokenMessage;
 use crate::types::event::SendMessageType;
 
 use super::json_rpc::send_success_response;
 use super::json_rpc::JsonRpcRequest;
+struct NewContent {
+    pub new_token: Option<NewTokenMessage>,
+    pub new_buy: Option<NewSwapMessage>,
+    pub new_sell: Option<NewSwapMessage>,
+}
+
+impl NewContent {
+    pub async fn new(state: &AppState) -> Self {
+        let new_token = match state.redis.get_new_token().await {
+            Ok(token) => token,
+            Err(e) => {
+                error!("Failed to get new token: {:?}", e);
+                None
+            }
+        };
+
+        let new_buy = match state.redis.get_new_buy().await {
+            Ok(buy) => buy,
+            Err(e) => {
+                error!("Failed to get new buy: {:?}", e);
+                None
+            }
+        };
+
+        let new_sell = match state.redis.get_new_sell().await {
+            Ok(sell) => sell,
+            Err(e) => {
+                error!("Failed to get new sell: {:?}", e);
+                None
+            }
+        };
+
+        Self {
+            new_token,
+            new_buy,
+            new_sell,
+        }
+    }
+}
 
 pub async fn handle_order_subscribe(
     request: JsonRpcRequest,
@@ -38,28 +80,12 @@ pub async fn handle_order_subscribe(
         .await
         .context("Failed to get initial order")?;
 
-    let new_token = state
-        .redis
-        .get_new_token()
-        .await
-        .context("Failed to get new token")?;
-    info!("new_token: {:?}", new_token);
-    // let new_swap = state
-    //     .redis
-    //     .get_new_swap()
-    //     .await
-    //     .context("Failed to get new_swap")?;
-    let new_buy = state
-        .redis
-        .get_new_buy()
-        .await
-        .context("Failed to get new_swap")?;
-    let new_sell = state
-        .redis
-        .get_new_sell()
-        .await
-        .context("Failed to get new_swap")?;
-    info!("new_token: {:?}", new_token);
+    let NewContent {
+        new_token,
+        new_buy,
+        new_sell,
+    } = NewContent::new(state).await;
+
     let message = OrderMessage {
         message_type: SendMessageType::ALL,
         new_token,
@@ -97,6 +123,7 @@ pub async fn handle_coin_subscribe(
     state: &AppState,
     tx: Sender<Message>,
 ) -> Result<JoinHandle<()>> {
+    info!("Coin subscribe");
     let coin_id = parse_coin_id(request.params())
         .ok_or_else(|| anyhow::anyhow!("Invalid or missing coin ID"))?;
     let chart_type = ChartType::from_str(
@@ -105,34 +132,24 @@ pub async fn handle_coin_subscribe(
     )
     .map_err(|e| anyhow::anyhow!("Failed to parse chart type: {}", e))?;
     info!("Chart type ={:?}", chart_type);
-    let mut receiver = state.coin_event_producer.get_coin_receiver(&coin_id).await;
 
     //이제 여기서 부터 coin 에 대한 데이터를 가지고 와서 보내주는 코드 작성해야함.
 
     //먼저 레디스에 접근해서 coin_id 에 해당하는 coin 정보 가져옴.
     //없으면 postgres 에서 가져와서 redis 에 저장함.
 
-    let new_token = state
-        .redis
-        .get_new_token()
-        .await
-        .context("Failed to get new token")?;
-    let new_buy = state
-        .redis
-        .get_new_buy()
-        .await
-        .context("Failed to get new_swap")?;
-    let new_sell = state
-        .redis
-        .get_new_sell()
-        .await
-        .context("Failed to get new_swap")?;
+    let NewContent {
+        new_token,
+        new_buy,
+        new_sell,
+    } = NewContent::new(state).await;
+
     let coin_page_controller = CoinPageController::new(state.postgres.clone());
 
     let coin_data = coin_page_controller
         .get_coin_message(&coin_id, chart_type.clone())
         .await?;
-
+    info!("Coin data is :{:?}", coin_data);
     let message = CoinMessage {
         message_type: SendMessageType::ALL,
         new_token,
@@ -144,40 +161,51 @@ pub async fn handle_coin_subscribe(
     send_success_response(&tx, request.method(), json!(message_json)).await?;
 
     // 메시지 수신 부분
+
+    let mut receiver = state.coin_event_producer.get_coin_receiver(&coin_id).await;
     let handle = tokio::spawn(async move {
-        loop {
-            match receiver.recv().await {
-                Ok(message) => {
-                    info!("Received message for coin_id: {}", message.coin.id);
-
-                    if let Some(chart_vec) = &message.coin.chart {
-                        if !chart_vec.is_empty() {
-                            let message_chart_type = ChartType::from_str(&chart_vec[0].chart_type)
-                                .map_err(|e| {
-                                    warn!("Invalid chart type: {}", e);
-                                    e
-                                })
-                                .ok();
-                            let chart_type = chart_type.clone();
-                            if message_chart_type.as_ref() != Some(&chart_type) {
-                                continue;
-                            }
-                        }
-                    }
-
-                    if let Err(e) =
-                        send_success_response(&tx, request.method(), json!(message)).await
-                    {
-                        error!("Failed to send coin event: {:?}", e);
-                    }
-                }
-                Err(e) => {
-                    error!("Failed to receive coin event: {:?}", e);
-                }
+        while let Some(message) = receiver.recv().await {
+            if let Err(e) = send_success_response(&tx, request.method(), json!(message)).await {
+                error!("Failed to send coin event: {:?}", e);
+                break;
             }
         }
     });
     info!("Receiver loop ended for coin_id: {}", coin_id);
+    Ok(handle)
+}
+pub async fn handle_new_content_subscribe(
+    request: JsonRpcRequest,
+    state: &AppState,
+    tx: Sender<Message>,
+) -> Result<JoinHandle<()>> {
+    let NewContent {
+        new_token,
+        new_buy,
+        new_sell,
+    } = NewContent::new(state).await;
+
+    let message = NewContentMessage {
+        new_token,
+        new_buy,
+        new_sell,
+    };
+    let message_json = serde_json::to_value(message).context("Failed to serialize coin")?;
+    send_success_response(&tx, request.method(), json!(message_json)).await?;
+    let mut receiver = state.new_content_producer.get_content_receiver().await;
+
+    let handle = tokio::spawn(async move {
+        while let Some(message) = receiver.recv().await {
+            info!("New content message: {:?}", message);
+            if let Err(e) = send_success_response(&tx, request.method(), json!(message)).await {
+                error!("Failed to send new event: {:?}", e);
+                break;
+            }
+        }
+        // Ensure receiver is dropped here
+        drop(receiver);
+    });
+
     Ok(handle)
 }
 

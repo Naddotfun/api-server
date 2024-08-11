@@ -1,11 +1,10 @@
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use crate::types::model::{Balance, Chart, Coin, Curve, Swap, Thread};
+use crate::types::model::{Balance, Chart, ChartWrapper, Coin, Curve, Swap, Thread};
 
-use super::wrapper::ChartWrapper;
-use super::{order::CreateSwapCoinInfo, CoinAndUserInfo};
-use super::{NewSwapMessage, NewTokenMessage, SendMessageType, User};
+use super::{CoinAndUserInfo, CoinInfo};
+use super::{NewSwapMessage, NewTokenMessage, SendMessageType, UserInfo};
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct CoinResponse {
@@ -32,7 +31,7 @@ impl CoinMessage {
         CoinMessage {
             message_type: SendMessageType::ALL,
             new_token: Some(NewTokenMessage {
-                creator: User {
+                creator: UserInfo {
                     nickname: info.user_nickname,
                     image_uri: info.user_image_uri,
                 },
@@ -58,12 +57,12 @@ impl CoinMessage {
                 message_type: SendMessageType::ALL,
                 new_token: None,
                 new_buy: Some(NewSwapMessage {
-                    trader_info: User {
+                    trader_info: UserInfo {
                         nickname: info.user_nickname,
                         image_uri: info.user_image_uri,
                     },
                     is_buy: true,
-                    coin_info: CreateSwapCoinInfo {
+                    coin_info: CoinInfo {
                         symbol: info.coin_symbol,
                         image_uri: info.coin_image_uri,
                     },
@@ -84,12 +83,12 @@ impl CoinMessage {
                 new_token: None,
                 new_buy: None,
                 new_sell: Some(NewSwapMessage {
-                    trader_info: User {
+                    trader_info: UserInfo {
                         nickname: info.user_nickname,
                         image_uri: info.user_image_uri,
                     },
                     is_buy: false,
-                    coin_info: CreateSwapCoinInfo {
+                    coin_info: CoinInfo {
                         symbol: info.coin_symbol,
                         image_uri: info.coin_image_uri,
                     },

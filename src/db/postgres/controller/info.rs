@@ -1,10 +1,10 @@
 use anyhow::Result;
-use sqlx::FromRow;
+
 use std::sync::Arc;
 
 use crate::{
     db::postgres::PostgresDatabase,
-    types::event::{order::CreateSwapCoinInfo, CoinAndUserInfo, User},
+    types::event::{CoinAndUserInfo, CoinInfo, UserInfo},
 };
 
 pub struct InfoController {
@@ -15,9 +15,9 @@ impl InfoController {
     pub fn new(db: Arc<PostgresDatabase>) -> Self {
         InfoController { db }
     }
-    pub async fn get_user(&self, account_id: &str) -> Result<User> {
+    pub async fn get_user(&self, account_id: &str) -> Result<UserInfo> {
         let creator = sqlx::query_as!(
-            User,
+            UserInfo,
             "SELECT nickname, image_uri
              FROM account WHERE id = $1",
             account_id
@@ -26,9 +26,9 @@ impl InfoController {
         .await?;
         Ok(creator)
     }
-    pub async fn get_coin_info(&self, coin_id: &str) -> Result<CreateSwapCoinInfo> {
+    pub async fn get_coin_info(&self, coin_id: &str) -> Result<CoinInfo> {
         let coin_info = sqlx::query_as!(
-            CreateSwapCoinInfo,
+            CoinInfo,
             "SELECT symbol, image_uri FROM coin WHERE id = $1",
             coin_id
         )

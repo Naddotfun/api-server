@@ -5,12 +5,9 @@ use tracing::info;
 
 use crate::{
     db::postgres::PostgresDatabase,
-    types::{
-        event::{
-            order::{OrderTokenResponse, OrderType},
-            User,
-        },
-        model::Coin,
+    types::event::{
+        order::{OrderTokenResponse, OrderType},
+        UserInfo,
     },
 };
 
@@ -77,7 +74,7 @@ impl OrderController {
         .await
         .context("Failed to fetch coin information")?;
 
-        let creator: User = serde_json::from_value(coin_response.creator)
+        let creator: UserInfo = serde_json::from_value(coin_response.creator)
             .context("Failed to deserialize creator information")?;
 
         Ok(OrderTokenResponse {
@@ -164,7 +161,7 @@ impl OrderController {
                 let coin_raw = coin_responses
                     .iter()
                     .find(|c| c.id.as_ref().map_or(false, |id| id == &id_score.id))?;
-                let creator: User = serde_json::from_value(coin_raw.creator.clone()).ok()?;
+                let creator: UserInfo = serde_json::from_value(coin_raw.creator.clone()).ok()?;
 
                 Some(CoinWithScore {
                     coin: OrderTokenResponse {
@@ -240,7 +237,7 @@ impl OrderController {
         let mut order_tokens: Vec<OrderTokenResponse> = coin_responses
             .into_iter()
             .filter_map(|raw| {
-                let creator: User = serde_json::from_value(raw.creator).ok()?;
+                let creator: UserInfo = serde_json::from_value(raw.creator).ok()?;
 
                 Some(OrderTokenResponse {
                     id: raw.id.unwrap_or_default(),

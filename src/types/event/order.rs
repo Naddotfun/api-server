@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use super::{NewSwapMessage, NewTokenMessage, SendMessageType, User};
+use super::{NewSwapMessage, NewTokenMessage, SendMessageType, UserInfo};
 use crate::types::model::{Coin, CoinReplyCount, Curve, Swap};
 use serde::{Deserialize, Serialize};
 
@@ -43,28 +43,26 @@ impl FromStr for OrderType {
     }
 }
 
-impl OrderType {}
-
 #[derive(Debug, Clone, Serialize)]
 pub struct OrderMessage {
     #[serde(skip)]
     pub message_type: SendMessageType,
+    #[serde(rename = "NewToken")]
     pub new_token: Option<NewTokenMessage>,
+    #[serde(rename = "NewBuy")]
     pub new_buy: Option<NewSwapMessage>,
+    #[serde(rename = "NewSell")]
     pub new_sell: Option<NewSwapMessage>,
+    #[serde(rename = "OrderType")]
     pub order_type: OrderType,
+    #[serde(rename = "OrderToken")]
     pub order_token: Option<Vec<OrderTokenResponse>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct CreateSwapCoinInfo {
-    pub symbol: String,
-    pub image_uri: String,
-}
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct OrderTokenResponse {
     pub id: String,          //coin.id
-    pub creator: User,       //coin 의 creator -> account table -> select nickname, image uri
+    pub creator: UserInfo,   //coin 의 creator -> account table -> select nickname, image uri
     pub name: String,        // coin.name
     pub symbol: String,      //coin.symbol
     pub image_uri: String,   // coin.image_uri

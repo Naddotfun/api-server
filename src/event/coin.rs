@@ -1,18 +1,9 @@
 use crate::{
     constant::change_channels::{BALANCE, CHART, COIN, CURVE, SWAP, THREAD},
-    db::{
-        postgres::{controller::info::InfoController, PostgresDatabase},
-        redis::RedisDatabase,
-    },
+    db::postgres::{controller::info::InfoController, PostgresDatabase},
     types::{
-        event::{
-            coin_message::CoinMessage,
-            wrapper::{
-                BalanceWrapper, ChartWrapper, CoinWrapper, CurveWrapper, SwapWrapper, ThreadWrapper,
-            },
-            SendMessageType,
-        },
-        model::{Balance, Chart, Coin, Curve, Swap, Thread},
+        event::{coin_message::CoinMessage, SendMessageType},
+        model::{Balance, ChartWrapper, Coin, Curve, FromValue, Swap, Thread},
     },
 };
 use anyhow::Result;
@@ -31,7 +22,7 @@ use tokio::{
     },
     time::sleep,
 };
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{error, info, instrument, warn};
 
 #[instrument(skip(producer))]
 pub async fn main(producer: Arc<CoinEventProducer>) -> Result<()> {
@@ -70,8 +61,8 @@ pub struct CoinReceiver {
     controller: Arc<CoinEventProducer>,
 }
 impl CoinReceiver {
-    pub async fn recv(&mut self) -> Result<CoinMessage, RecvError> {
-        self.receiver.recv().await
+    pub async fn recv(&mut self) -> Option<CoinMessage> {
+        self.receiver.recv().await.ok()
     }
 }
 
@@ -118,12 +109,12 @@ impl CoinEventProducer {
                 let coin_id = payload["coin_id"].as_str().unwrap_or("").to_string();
 
                 let event = match notification.channel() {
-                    COIN => CoinEvent::Coin(CoinWrapper::parse(payload)?),
-                    SWAP => CoinEvent::Swap(SwapWrapper::parse(payload)?),
-                    CHART => CoinEvent::Chart(ChartWrapper::parse(payload)?),
-                    BALANCE => CoinEvent::Balance(BalanceWrapper::parse(payload)?),
-                    CURVE => CoinEvent::Curve(CurveWrapper::parse(payload)?),
-                    THREAD => CoinEvent::Thread(ThreadWrapper::parse(payload)?),
+                    COIN => CoinEvent::Coin(Coin::from_value(payload)?),
+                    SWAP => CoinEvent::Swap(Swap::from_value(payload)?),
+                    CHART => CoinEvent::Chart(ChartWrapper::from_value(payload)?),
+                    BALANCE => CoinEvent::Balance(Balance::from_value(payload)?),
+                    CURVE => CoinEvent::Curve(Curve::from_value(payload)?),
+                    THREAD => CoinEvent::Thread(Thread::from_value(payload)?),
                     _ => continue,
                 };
 

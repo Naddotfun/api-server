@@ -1,4 +1,3 @@
-pub mod coin;
 pub mod coinpage;
 pub mod info;
 

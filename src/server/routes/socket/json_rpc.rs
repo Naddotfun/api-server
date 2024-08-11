@@ -4,13 +4,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::mpsc::Sender;
 use tracing::info;
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct JsonRpcRequest {
     #[serde(default = "default_jsonrpc")]
     jsonrpc: String,
     method: JsonRpcMethod,
     params: Option<Value>,
-    id: u8,
 }
 impl JsonRpcRequest {
     pub fn method(&self) -> &JsonRpcMethod {
@@ -29,6 +28,7 @@ fn default_jsonrpc() -> String {
 pub enum JsonRpcMethod {
     OrderSubscribe,
     CoinSubscribe,
+    NewContentSubscribe,
     // 다른 메서드들을 여기에 추가할 수 있습니다.
 }
 

@@ -1,5 +1,4 @@
-use crate::types::event::wrapper::ChartWrapper;
-use crate::types::model::Chart;
+use crate::types::model::{Chart, ChartWrapper};
 use crate::{
     db::postgres::PostgresDatabase,
     types::{chart_type::ChartType, event::coin_message::CoinResponse},

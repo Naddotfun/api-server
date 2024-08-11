@@ -19,10 +19,12 @@ use crate::{
     types::{
         event::{
             order::{OrderEvent, OrderMessage, OrderTokenResponse, OrderType},
-            wrapper::{CoinWrapper, CurveWrapper, ReplyCountWrapper, SwapWrapper},
             NewSwapMessage, NewTokenMessage, SendMessageType,
         },
-        model::{Coin, CoinReplyCount, Curve, Swap},
+        model::{
+            Coin, CoinReplyCount, CoinReplyCountWrapper, CoinWrapper, Curve, CurveWrapper,
+            FromValue, Swap, SwapWrapper,
+        },
     },
 };
 use anyhow::{Context, Result};
@@ -38,7 +40,7 @@ use tokio::{
     },
     time::sleep,
 };
-use tracing::{error, info, instrument, warn};
+use tracing::{debug, error, info, instrument, warn};
 
 #[instrument(skip(producer))]
 pub async fn main(producer: Arc<OrderEventProducer>) -> Result<()> {
@@ -164,21 +166,20 @@ impl OrderEventProducer {
 
                 let senders = self.order_senders.read().await;
 
-                info!("channel {:?}", notification.channel());
                 let event = match notification.channel() {
-                    COIN => OrderEvent::CreationTime(CoinWrapper::parse(payload)?),
-                    SWAP => OrderEvent::BumpOrder(SwapWrapper::parse(payload)?),
-                    CURVE => OrderEvent::MartKetCap(CurveWrapper::parse(payload)?),
+                    COIN => OrderEvent::CreationTime(Coin::from_value(payload)?),
+                    SWAP => OrderEvent::BumpOrder(Swap::from_value(payload)?),
+                    CURVE => OrderEvent::MartKetCap(Curve::from_value(payload)?),
                     COIN_REPLIES_COUNT => {
-                        OrderEvent::ReplyChange(ReplyCountWrapper::parse(payload)?)
+                        OrderEvent::ReplyChange(CoinReplyCount::from_value(payload)?)
                     }
                     _ => continue,
                 };
-                info!("Event {:?}", event);
+
                 let handle_result = self.handle_order_event(event).await;
                 let messages = match handle_result {
                     Ok(messages) => {
-                        info!("Messages {:?}", messages);
+                        debug!("Handled event successfully");
                         messages
                     }
                     Err(e) => {
@@ -192,7 +193,7 @@ impl OrderEventProducer {
                         SendMessageType::ALL => {
                             // Broadcast to all connected users
                             for (_, sender) in senders.iter() {
-                                info!("Sending message to all");
+                                debug!("Sending message to all");
                                 let _ = sender.0.send(message.clone());
                             }
                         }
@@ -301,21 +302,21 @@ impl OrderEventProducer {
     async fn handle_order_event(&self, event: OrderEvent) -> Result<Vec<OrderMessage>> {
         match event {
             OrderEvent::CreationTime(coin) => {
-                info!("Coin creation time event {:?}", coin);
+                debug!("Coin creation time event {:?}", coin);
 
                 Ok(self.handle_creation_time_order(coin).await?)
             }
             OrderEvent::BumpOrder(swap) => {
-                info!("Swap bump order event {:?}", swap);
+                debug!("Swap bump order event {:?}", swap);
 
                 Ok(self.handle_bump_order(swap).await?)
             }
             OrderEvent::MartKetCap(curve) => {
-                info!("Curve market cap event {:?}", curve);
+                debug!("Curve market cap event {:?}", curve);
                 Ok(self.handle_market_cap_order(curve).await?)
             }
             OrderEvent::ReplyChange(coin_reply) => {
-                info!("Coin latest reply count event {:?}", coin_reply);
+                debug!("Coin latest reply count event {:?}", coin_reply);
                 Ok(self.handle_reply_change_order(coin_reply).await?)
             }
         }

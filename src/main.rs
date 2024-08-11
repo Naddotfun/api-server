@@ -6,6 +6,7 @@ use api_server::{
     db::{postgres::PostgresDatabase, redis::RedisDatabase},
     event::{
         coin::{self, CoinEventProducer},
+        new_content::{self, NewContentEventProducer},
         order::{self, OrderEventProducer},
     },
     server,
@@ -28,9 +29,10 @@ async fn main() -> Result<()> {
 
     let coin_event_producer = Arc::new(CoinEventProducer::new(postgres.clone()));
     let order_event_porducer = Arc::new(OrderEventProducer::new(redis.clone(), postgres.clone()));
-
+    let new_content_producer = Arc::new(NewContentEventProducer::new(postgres.clone()));
     set.spawn(order::main(order_event_porducer.clone()));
     set.spawn(coin::main(coin_event_producer.clone()));
+    set.spawn(new_content::main(new_content_producer.clone()));
     // let global_event_controller = Arc::new(GlobalEventController::new(100));
     // set.spawn(coin::main(coin_event_producer.clone(), postgres.clone()));
 
@@ -39,6 +41,7 @@ async fn main() -> Result<()> {
         redis.clone(),
         order_event_porducer.clone(),
         coin_event_producer.clone(),
+        new_content_producer.clone(),
     ));
     while let Some(res) = set.join_next().await {
         match res {
