@@ -8,19 +8,15 @@ use std::{
 };
 
 use crate::{
-    constant::change_channels::{COIN, COIN_REPLIES_COUNT, CURVE, SWAP},
+    constant::change_channels::{COIN, SWAP},
     db::{
-        postgres::{
-            controller::{info::InfoController, order::OrderController},
-            PostgresDatabase,
-        },
+        postgres::{controller::info::InfoController, PostgresDatabase},
         redis::RedisDatabase,
     },
     types::{
         event::{
-            new_content::{NewContent, NewContentMessage},
-            order::{OrderEvent, OrderMessage, OrderTokenResponse, OrderType},
-            NewSwapMessage, NewTokenMessage, SendMessageType,
+            capture::NewContentCapture, new_content::NewContentMessage, NewSwapMessage,
+            NewTokenMessage, SendMessageType,
         },
         model::{
             Coin, CoinReplyCount, CoinReplyCountWrapper, CoinWrapper, Curve, CurveWrapper,
@@ -30,13 +26,13 @@ use crate::{
 };
 use anyhow::{anyhow, Context, Result};
 use chrono::Utc;
-use futures::{future::try_join_all, StreamExt};
+use futures::StreamExt;
 
 use serde_json::Value;
 use sqlx::postgres::PgListener;
 use tokio::{
     sync::{
-        broadcast::{self, error::RecvError, Receiver, Sender},
+        broadcast::{self, Receiver, Sender},
         RwLock,
     },
     time::sleep,
@@ -113,12 +109,12 @@ impl NewContentEventProducer {
                     debug!("New Content No active channels");
                     continue; // 총 채널 수가 0이면 다음 알림으로 넘어갑니다.
                 }
-                info!("Changing data capture start");
+
                 let payload: Value = serde_json::from_str(&notification.payload())?;
 
                 let event = match notification.channel() {
-                    COIN => NewContent::NewToken(Coin::from_value(payload)?),
-                    SWAP => NewContent::NewSwap(Swap::from_value(payload)?),
+                    COIN => NewContentCapture::NewToken(Coin::from_value(payload)?),
+                    SWAP => NewContentCapture::NewSwap(Swap::from_value(payload)?),
                     _ => continue,
                 };
 
@@ -145,16 +141,19 @@ impl NewContentEventProducer {
         Ok(())
     }
 
-    pub async fn handle_new_content(&self, content: NewContent) -> Result<NewContentMessage> {
+    pub async fn handle_new_content(
+        &self,
+        content: NewContentCapture,
+    ) -> Result<NewContentMessage> {
         match content {
-            NewContent::NewToken(coin) => {
+            NewContentCapture::NewToken(coin) => {
                 let info_controller = InfoController::new(self.db.clone());
                 let info = info_controller
                     .get_coin_and_user_info(&coin.id, &coin.creator)
                     .await?;
                 Ok(NewContentMessage::from_coin(coin, info))
             }
-            NewContent::NewSwap(swap) => {
+            NewContentCapture::NewSwap(swap) => {
                 let info_controller = InfoController::new(self.db.clone());
                 let info = info_controller
                     .get_coin_and_user_info(&swap.coin_id, &swap.sender)

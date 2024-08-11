@@ -18,7 +18,8 @@ use crate::{
     },
     types::{
         event::{
-            order::{OrderEvent, OrderMessage, OrderTokenResponse, OrderType},
+            capture::OrderEventCapture,
+            order::{OrderMessage, OrderTokenResponse, OrderType},
             NewSwapMessage, NewTokenMessage, SendMessageType,
         },
         model::{
@@ -167,11 +168,11 @@ impl OrderEventProducer {
                 let senders = self.order_senders.read().await;
 
                 let event = match notification.channel() {
-                    COIN => OrderEvent::CreationTime(Coin::from_value(payload)?),
-                    SWAP => OrderEvent::BumpOrder(Swap::from_value(payload)?),
-                    CURVE => OrderEvent::MartKetCap(Curve::from_value(payload)?),
+                    COIN => OrderEventCapture::CreationTime(Coin::from_value(payload)?),
+                    SWAP => OrderEventCapture::BumpOrder(Swap::from_value(payload)?),
+                    CURVE => OrderEventCapture::MartKetCap(Curve::from_value(payload)?),
                     COIN_REPLIES_COUNT => {
-                        OrderEvent::ReplyChange(CoinReplyCount::from_value(payload)?)
+                        OrderEventCapture::ReplyChange(CoinReplyCount::from_value(payload)?)
                     }
                     _ => continue,
                 };
@@ -299,23 +300,23 @@ impl OrderEventProducer {
 
     // Handle message
 
-    async fn handle_order_event(&self, event: OrderEvent) -> Result<Vec<OrderMessage>> {
+    async fn handle_order_event(&self, event: OrderEventCapture) -> Result<Vec<OrderMessage>> {
         match event {
-            OrderEvent::CreationTime(coin) => {
+            OrderEventCapture::CreationTime(coin) => {
                 debug!("Coin creation time event {:?}", coin);
 
                 Ok(self.handle_creation_time_order(coin).await?)
             }
-            OrderEvent::BumpOrder(swap) => {
+            OrderEventCapture::BumpOrder(swap) => {
                 debug!("Swap bump order event {:?}", swap);
 
                 Ok(self.handle_bump_order(swap).await?)
             }
-            OrderEvent::MartKetCap(curve) => {
+            OrderEventCapture::MartKetCap(curve) => {
                 debug!("Curve market cap event {:?}", curve);
                 Ok(self.handle_market_cap_order(curve).await?)
             }
-            OrderEvent::ReplyChange(coin_reply) => {
+            OrderEventCapture::ReplyChange(coin_reply) => {
                 debug!("Coin latest reply count event {:?}", coin_reply);
                 Ok(self.handle_reply_change_order(coin_reply).await?)
             }

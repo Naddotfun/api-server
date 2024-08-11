@@ -54,6 +54,7 @@ pub struct Coin {
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Curve {
+    #[serde(rename = "curve_id")]
     pub id: String,
     pub coin_id: String,
     pub virtual_nad: BigDecimal,
@@ -66,6 +67,7 @@ pub struct Curve {
 
 #[derive(Debug, Clone, Deserialize, Serialize, sqlx::FromRow)]
 pub struct Swap {
+    #[serde(skip_serializing)]
     pub id: i32,
     pub coin_id: String,
     pub sender: String,
@@ -78,7 +80,9 @@ pub struct Swap {
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
 pub struct Chart {
+    #[serde(skip_serializing)]
     pub id: i32,
+    #[serde(skip_serializing)]
     pub coin_id: String,
     #[serde(serialize_with = "serialize_price_bigdecimal")]
     pub open_price: BigDecimal,
@@ -93,7 +97,9 @@ pub struct Chart {
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Balance {
+    #[serde(skip_serializing)]
     pub id: i32,
+    #[serde(skip_serializing)]
     pub coin_id: String,
     pub account: String,
     pub amount: BigDecimal,
@@ -119,6 +125,7 @@ pub struct AccountSession {
 #[derive(Debug, Clone, Deserialize, Serialize, sqlx::FromRow, ToSchema)]
 pub struct Thread {
     pub id: i32,
+    #[serde(skip_serializing)]
     pub coin_id: String,
     pub author_id: String,
     pub content: String,
@@ -134,6 +141,7 @@ pub struct Thread {
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
 pub struct CoinReplyCount {
+    #[serde(skip_serializing)]
     pub coin_id: String,
     pub reply_count: i32,
 }
@@ -142,7 +150,7 @@ pub struct CoinReplyCount {
 #[derive(Debug, Deserialize)]
 pub struct CoinWrapper {
     record: Coin,
-
+    #[serde(skip_serializing)]
     coin_id: String,
 }
 
@@ -160,20 +168,35 @@ pub struct SwapWrapper {
     coin_id: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BalanceWrapper {
-    record: Balance,
+    pub operation: String,
+    #[serde(rename(serialize = "balance", deserialize = "record"))]
+    pub balance: Balance,
     #[serde(skip_serializing)]
-    coin_id: String,
+    pub coin_id: String,
 }
 
-#[derive(Debug, Deserialize)]
+impl BalanceWrapper {
+    pub fn from_value(value: Value) -> Result<BalanceWrapper> {
+        serde_json::from_value(value).context("Failed to deserialize BalanceWrapper")
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThreadWrapper {
-    record: Thread,
+    pub operation: String,
+    #[serde(rename(serialize = "thread", deserialize = "record"))]
+    pub record: Thread,
     #[serde(skip_serializing)]
-    coin_id: String,
+    pub coin_id: String,
 }
 
+impl ThreadWrapper {
+    pub fn from_value(value: Value) -> Result<ThreadWrapper> {
+        serde_json::from_value(value).context("Failed to deserialize ThreadWrapper")
+    }
+}
 #[derive(Debug, Deserialize)]
 pub struct CoinReplyCountWrapper {
     record: CoinReplyCount,
@@ -184,6 +207,7 @@ pub struct CoinReplyCountWrapper {
 // ChartWrapper implementation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChartWrapper {
+    #[serde(rename(serialize = "chart", deserialize = "record"))]
     pub record: Chart,
     #[serde(skip_serializing)]
     pub chart_type: String,
@@ -216,6 +240,4 @@ pub trait FromValue: Sized {
 impl_from_value!(Coin, CoinWrapper);
 impl_from_value!(Curve, CurveWrapper);
 impl_from_value!(Swap, SwapWrapper);
-impl_from_value!(Balance, BalanceWrapper);
-impl_from_value!(Thread, ThreadWrapper);
 impl_from_value!(CoinReplyCount, CoinReplyCountWrapper);

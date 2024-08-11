@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use crate::types::model::{Balance, Chart, ChartWrapper, Coin, Curve, Swap, Thread};
+use crate::types::model::{
+    Balance, BalanceWrapper, Chart, ChartWrapper, Coin, Curve, Swap, Thread, ThreadWrapper,
+};
 
 use super::{CoinAndUserInfo, CoinInfo};
 use super::{NewSwapMessage, NewTokenMessage, SendMessageType, UserInfo};
@@ -10,10 +12,14 @@ use super::{NewSwapMessage, NewTokenMessage, SendMessageType, UserInfo};
 pub struct CoinResponse {
     pub id: String,
     pub swap: Option<Vec<Swap>>,
+    #[serde(rename = "charts")]
     pub chart: Option<Vec<ChartWrapper>>,
-    pub balance: Option<Vec<Balance>>,
+    #[serde(rename = "balances")]
+    pub balance: Option<Vec<BalanceWrapper>>,
     pub curve: Option<Curve>,
-    pub thread: Option<Vec<Thread>>,
+
+    #[serde(rename = "threads")]
+    pub thread: Option<Vec<ThreadWrapper>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -121,7 +127,7 @@ impl CoinMessage {
             },
         }
     }
-    pub fn from_balance(balance: Balance) -> Self {
+    pub fn from_balance(balance: BalanceWrapper) -> Self {
         CoinMessage {
             message_type: SendMessageType::Regular,
             new_token: None,
@@ -154,7 +160,7 @@ impl CoinMessage {
         }
     }
 
-    pub fn from_thread(thread: Thread) -> Self {
+    pub fn from_thread(thread: ThreadWrapper) -> Self {
         CoinMessage {
             message_type: SendMessageType::Regular,
             new_token: None,

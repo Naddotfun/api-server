@@ -2,8 +2,11 @@ use crate::{
     constant::change_channels::{BALANCE, CHART, COIN, CURVE, SWAP, THREAD},
     db::postgres::{controller::info::InfoController, PostgresDatabase},
     types::{
-        event::{coin_message::CoinMessage, SendMessageType},
-        model::{Balance, ChartWrapper, Coin, Curve, FromValue, Swap, Thread},
+        event::{capture::CoinEventCapture, coin::CoinMessage, SendMessageType},
+        model::{
+            Balance, BalanceWrapper, ChartWrapper, Coin, Curve, FromValue, Swap, Thread,
+            ThreadWrapper,
+        },
     },
 };
 use anyhow::Result;
@@ -44,15 +47,6 @@ pub async fn main(producer: Arc<CoinEventProducer>) -> Result<()> {
 
     error!("Coin event capture ended");
     Ok(())
-}
-#[derive(Clone, Debug)]
-pub enum CoinEvent {
-    Coin(Coin),
-    Swap(Swap),
-    Chart(ChartWrapper),
-    Balance(Balance),
-    Curve(Curve),
-    Thread(Thread),
 }
 
 pub struct CoinReceiver {
@@ -109,18 +103,18 @@ impl CoinEventProducer {
                 let coin_id = payload["coin_id"].as_str().unwrap_or("").to_string();
 
                 let event = match notification.channel() {
-                    COIN => CoinEvent::Coin(Coin::from_value(payload)?),
-                    SWAP => CoinEvent::Swap(Swap::from_value(payload)?),
-                    CHART => CoinEvent::Chart(ChartWrapper::from_value(payload)?),
-                    BALANCE => CoinEvent::Balance(Balance::from_value(payload)?),
-                    CURVE => CoinEvent::Curve(Curve::from_value(payload)?),
-                    THREAD => CoinEvent::Thread(Thread::from_value(payload)?),
+                    COIN => CoinEventCapture::Coin(Coin::from_value(payload)?),
+                    SWAP => CoinEventCapture::Swap(Swap::from_value(payload)?),
+                    CHART => CoinEventCapture::Chart(ChartWrapper::from_value(payload)?),
+                    BALANCE => CoinEventCapture::Balance(BalanceWrapper::from_value(payload)?),
+                    CURVE => CoinEventCapture::Curve(Curve::from_value(payload)?),
+                    THREAD => CoinEventCapture::Thread(ThreadWrapper::from_value(payload)?),
                     _ => continue,
                 };
 
                 let senders = self.coin_senders.read().await;
                 let should_process = match &event {
-                    CoinEvent::Coin(_) | CoinEvent::Swap(_) => true,
+                    CoinEventCapture::Coin(_) | CoinEventCapture::Swap(_) => true,
                     _ => senders.contains_key(&coin_id),
                 };
 
@@ -152,13 +146,13 @@ impl CoinEventProducer {
                                             "Regular message sent successfully for coin_id: {:?}",
                                             message
                                         ),
-                                        Err(e) => warn!(
+                                        Err(e) => error!(
                                             "Failed to send Regular message for coin_id: {}: {:?}",
                                             message.coin.id, e
                                         ),
                                     }
                                 } else {
-                                    warn!("No sender found for coin_id: {}", message.coin.id);
+                                    error!("No sender found for coin_id: {}", message.coin.id);
                                 }
                             }
                         }
@@ -171,14 +165,18 @@ impl CoinEventProducer {
         Ok(())
     }
 
-    async fn handle_event(&self, event: CoinEvent) -> Result<Vec<CoinMessage>> {
+    async fn handle_event(&self, event: CoinEventCapture) -> Result<Vec<CoinMessage>> {
         let result = match event {
-            CoinEvent::Coin(coin) => self.handle_coin_event(coin).map_ok(|m| m).await,
-            CoinEvent::Swap(swap) => self.handle_swap_event(swap).map_ok(|m| m).await,
-            CoinEvent::Chart(chart) => self.handle_chart_event(chart).map_ok(|m| m).await,
-            CoinEvent::Balance(balance) => self.handle_balance_event(balance).map_ok(|m| m).await,
-            CoinEvent::Curve(curve) => self.handle_curve_event(curve).map_ok(|m| m).await,
-            CoinEvent::Thread(thread) => self.handle_thread_event(thread).map_ok(|m| m).await,
+            CoinEventCapture::Coin(coin) => self.handle_coin_event(coin).map_ok(|m| m).await,
+            CoinEventCapture::Swap(swap) => self.handle_swap_event(swap).map_ok(|m| m).await,
+            CoinEventCapture::Chart(chart) => self.handle_chart_event(chart).map_ok(|m| m).await,
+            CoinEventCapture::Balance(balance) => {
+                self.handle_balance_event(balance).map_ok(|m| m).await
+            }
+            CoinEventCapture::Curve(curve) => self.handle_curve_event(curve).map_ok(|m| m).await,
+            CoinEventCapture::Thread(thread) => {
+                self.handle_thread_event(thread).map_ok(|m| m).await
+            }
         };
 
         match result {
@@ -213,7 +211,7 @@ impl CoinEventProducer {
         Ok(vec![CoinMessage::from_chart(chart)])
     }
 
-    async fn handle_balance_event(&self, balance: Balance) -> Result<Vec<CoinMessage>> {
+    async fn handle_balance_event(&self, balance: BalanceWrapper) -> Result<Vec<CoinMessage>> {
         Ok(vec![CoinMessage::from_balance(balance)])
     }
 
@@ -221,7 +219,7 @@ impl CoinEventProducer {
         Ok(vec![CoinMessage::from_curve(curve)])
     }
 
-    async fn handle_thread_event(&self, thread: Thread) -> Result<Vec<CoinMessage>> {
+    async fn handle_thread_event(&self, thread: ThreadWrapper) -> Result<Vec<CoinMessage>> {
         // info!("Handling thread event {:?}", thread);
         // Thread 이벤트 처리 로직
         Ok(vec![CoinMessage::from_thread(thread)])

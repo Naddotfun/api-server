@@ -67,8 +67,3 @@ impl NewContentMessage {
         }
     }
 }
-
-pub enum NewContent {
-    NewSwap(Swap),
-    NewToken(Coin),
-}

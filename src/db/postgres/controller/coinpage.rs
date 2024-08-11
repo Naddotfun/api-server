@@ -1,7 +1,7 @@
-use crate::types::model::{Chart, ChartWrapper};
+use crate::types::model::{Balance, BalanceWrapper, Chart, ChartWrapper, Thread, ThreadWrapper};
 use crate::{
     db::postgres::PostgresDatabase,
-    types::{chart_type::ChartType, event::coin_message::CoinResponse},
+    types::{chart_type::ChartType, event::coin::CoinResponse},
 };
 use anyhow::{Context, Result};
 use serde_json::Value;
@@ -71,13 +71,41 @@ impl CoinPageController {
                     .collect::<Vec<ChartWrapper>>()
             });
 
+        let balance = raw
+            .balance
+            .and_then(|v| serde_json::from_value::<Vec<Balance>>(v).ok())
+            .map(|balances| {
+                balances
+                    .into_iter()
+                    .map(|balance| BalanceWrapper {
+                        operation: "select".to_string(),
+                        balance: balance,
+                        coin_id: coin_id.to_string(),
+                    })
+                    .collect::<Vec<BalanceWrapper>>()
+            });
+
+        let thread = raw
+            .thread
+            .and_then(|v| serde_json::from_value::<Vec<Thread>>(v).ok())
+            .map(|thread| {
+                thread
+                    .into_iter()
+                    .map(|thread| ThreadWrapper {
+                        operation: "select".to_string(),
+                        record: thread,
+                        coin_id: coin_id.to_string(),
+                    })
+                    .collect::<Vec<ThreadWrapper>>()
+            });
+
         Ok(CoinResponse {
             id: coin_id.to_string(),
             swap: raw.swap.and_then(|v| serde_json::from_value(v).ok()),
             chart,
-            balance: raw.balance.and_then(|v| serde_json::from_value(v).ok()),
+            balance,
             curve: raw.curve.and_then(|v| serde_json::from_value(v).ok()),
-            thread: raw.thread.and_then(|v| serde_json::from_value(v).ok()),
+            thread,
         })
     }
 }

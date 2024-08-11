@@ -16,7 +16,7 @@ use crate::db::postgres::controller::coinpage::CoinPageController;
 use crate::server::state::AppState;
 
 use crate::types::chart_type::ChartType;
-use crate::types::event::coin_message::CoinMessage;
+use crate::types::event::coin::CoinMessage;
 use crate::types::event::new_content::NewContentMessage;
 use crate::types::event::order::OrderMessage;
 use crate::types::event::order::OrderType;
