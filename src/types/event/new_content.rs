@@ -6,18 +6,15 @@ use super::{CoinAndUserInfo, CoinInfo, NewSwapMessage, NewTokenMessage, UserInfo
 
 #[derive(Debug, Clone, Serialize)]
 pub struct NewContentMessage {
-    #[serde(rename = "NewBuy")]
     pub new_buy: Option<NewSwapMessage>,
-    #[serde(rename = "NewSell")]
     pub new_sell: Option<NewSwapMessage>,
-    #[serde(rename = "NewToken")]
     pub new_token: Option<NewTokenMessage>,
 }
 impl NewContentMessage {
     pub fn from_coin(coin: Coin, info: CoinAndUserInfo) -> Self {
         NewContentMessage {
             new_token: Some(NewTokenMessage {
-                creator: UserInfo {
+                user_info: UserInfo {
                     nickname: info.user_nickname,
                     image_uri: info.user_image_uri,
                 },

@@ -54,7 +54,7 @@ pub struct Coin {
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Curve {
-    #[serde(rename = "curve_id")]
+    #[serde(rename(serialize = "curve_id"))]
     pub id: String,
     pub coin_id: String,
     pub virtual_nad: BigDecimal,

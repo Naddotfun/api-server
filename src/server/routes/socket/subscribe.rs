@@ -7,6 +7,7 @@ use serde_json::json;
 use serde_json::Value;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::{sync::mpsc::Sender, task::JoinHandle};
+use tracing::debug;
 use tracing::error;
 use tracing::info;
 use tracing::warn;
@@ -165,15 +166,39 @@ pub async fn handle_coin_subscribe(
     let mut receiver = state.coin_event_producer.get_coin_receiver(&coin_id).await;
     let handle = tokio::spawn(async move {
         while let Some(message) = receiver.recv().await {
-            if let Err(e) = send_success_response(&tx, request.method(), json!(message)).await {
-                error!("Failed to send coin event: {:?}", e);
-                break;
+            debug!("Received new coin message");
+
+            let should_send = match &message.coin.chart {
+                None => {
+                    debug!("Chart is None, sending message");
+                    true
+                }
+                Some(charts) => {
+                    let matching_chart = charts
+                        .iter()
+                        .any(|cw| cw.chart_type == chart_type.to_string());
+                    if matching_chart {
+                        debug!("Found matching chart type, sending message");
+                        true
+                    } else {
+                        debug!("No matching chart type, skipping message");
+                        false
+                    }
+                }
+            };
+
+            if should_send {
+                if let Err(e) = send_success_response(&tx, request.method(), json!(message)).await {
+                    error!("Failed to send coin event: {:?}", e);
+                    break;
+                }
             }
         }
     });
     info!("Receiver loop ended for coin_id: {}", coin_id);
     Ok(handle)
 }
+
 pub async fn handle_new_content_subscribe(
     request: JsonRpcRequest,
     state: &AppState,
@@ -197,6 +222,7 @@ pub async fn handle_new_content_subscribe(
     let handle = tokio::spawn(async move {
         while let Some(message) = receiver.recv().await {
             info!("New content message: {:?}", message);
+
             if let Err(e) = send_success_response(&tx, request.method(), json!(message)).await {
                 error!("Failed to send new event: {:?}", e);
                 break;

@@ -74,7 +74,7 @@ impl OrderController {
         .await
         .context("Failed to fetch coin information")?;
 
-        let creator: UserInfo = serde_json::from_value(coin_response.creator)
+        let user_info: UserInfo = serde_json::from_value(coin_response.creator)
             .context("Failed to deserialize creator information")?;
 
         Ok(OrderTokenResponse {
@@ -85,7 +85,7 @@ impl OrderController {
             description: coin_response.description.unwrap_or_default(),
             reply_count: coin_response.reply_count.unwrap_or_default(),
             price: coin_response.price.unwrap_or_default(),
-            creator,
+            user_info,
             created_at: coin_response.created_at.unwrap_or_default(),
         })
     }
@@ -161,7 +161,7 @@ impl OrderController {
                 let coin_raw = coin_responses
                     .iter()
                     .find(|c| c.id.as_ref().map_or(false, |id| id == &id_score.id))?;
-                let creator: UserInfo = serde_json::from_value(coin_raw.creator.clone()).ok()?;
+                let user_info: UserInfo = serde_json::from_value(coin_raw.creator.clone()).ok()?;
 
                 Some(CoinWithScore {
                     coin: OrderTokenResponse {
@@ -172,7 +172,7 @@ impl OrderController {
                         description: coin_raw.description.clone().unwrap_or_default(),
                         reply_count: coin_raw.reply_count.clone().unwrap_or_default(),
                         price: coin_raw.price.clone().unwrap_or_default(),
-                        creator,
+                        user_info,
                         created_at: coin_raw.created_at.clone().unwrap_or_default(),
                     },
                     score: id_score.score.unwrap_or_default(),
@@ -237,7 +237,7 @@ impl OrderController {
         let mut order_tokens: Vec<OrderTokenResponse> = coin_responses
             .into_iter()
             .filter_map(|raw| {
-                let creator: UserInfo = serde_json::from_value(raw.creator).ok()?;
+                let user_info: UserInfo = serde_json::from_value(raw.creator).ok()?;
 
                 Some(OrderTokenResponse {
                     id: raw.id.unwrap_or_default(),
@@ -247,7 +247,7 @@ impl OrderController {
                     description: raw.description.unwrap_or_default(),
                     reply_count: raw.reply_count.unwrap_or_default(),
                     price: raw.price.unwrap_or_default(),
-                    creator,
+                    user_info,
                     created_at: raw.created_at.unwrap_or_default(),
                 })
             })

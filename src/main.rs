@@ -21,7 +21,7 @@ use tracing::{info, warn};
 async fn main() -> Result<()> {
     dotenv::dotenv().ok();
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::INFO)
+        .with_max_level(tracing::Level::DEBUG)
         .init();
     let mut set = JoinSet::new();
     let postgres = Arc::new(PostgresDatabase::new().await);

@@ -9,10 +9,10 @@ use crate::{
         },
     },
 };
-use anyhow::Result;
+use anyhow::{Context, Result};
 use futures::{StreamExt, TryFutureExt};
 use serde_json::Value;
-use sqlx::postgres::PgListener;
+use sqlx::postgres::{PgListener, PgNotification};
 use std::{collections::HashMap, sync::atomic::AtomicUsize};
 use std::{
     sync::{atomic::Ordering, Arc},
@@ -25,7 +25,7 @@ use tokio::{
     },
     time::sleep,
 };
-use tracing::{error, info, instrument, warn};
+use tracing::{debug, error, info, instrument, warn};
 
 #[instrument(skip(producer))]
 pub async fn main(producer: Arc<CoinEventProducer>) -> Result<()> {
@@ -79,151 +79,160 @@ pub struct CoinEventProducer {
 
 impl CoinEventProducer {
     pub fn new(db: Arc<PostgresDatabase>) -> Self {
-        CoinEventProducer {
+        Self {
             db,
             coin_senders: Arc::new(RwLock::new(HashMap::new())),
             total_channels: Arc::new(AtomicUsize::new(0)),
         }
     }
+
     #[instrument(skip(self))]
     pub async fn change_data_capture(&self) -> Result<()> {
-        let mut listener = PgListener::connect_with(&self.db.pool).await?;
+        let mut listener = PgListener::connect_with(&self.db.pool)
+            .await
+            .context("Failed to connect to database")?;
         listener
             .listen_all(vec![COIN, SWAP, CHART, BALANCE, CURVE, THREAD])
-            .await?;
+            .await
+            .context("Failed to listen to channels")?;
+
         let mut stream = listener.into_stream();
         info!("Coin event capture started");
+
         while let Some(notification) = stream.next().await {
-            if let Ok(notification) = notification {
-                if self.total_channels.load(Ordering::Relaxed) == 0 {
-                    continue;
-                }
-
-                let payload: Value = serde_json::from_str(&notification.payload())?;
-                let coin_id = payload["coin_id"].as_str().unwrap_or("").to_string();
-
-                let event = match notification.channel() {
-                    COIN => CoinEventCapture::Coin(Coin::from_value(payload)?),
-                    SWAP => CoinEventCapture::Swap(Swap::from_value(payload)?),
-                    CHART => CoinEventCapture::Chart(ChartWrapper::from_value(payload)?),
-                    BALANCE => CoinEventCapture::Balance(BalanceWrapper::from_value(payload)?),
-                    CURVE => CoinEventCapture::Curve(Curve::from_value(payload)?),
-                    THREAD => CoinEventCapture::Thread(ThreadWrapper::from_value(payload)?),
-                    _ => continue,
-                };
-
-                let senders = self.coin_senders.read().await;
-                let should_process = match &event {
-                    CoinEventCapture::Coin(_) | CoinEventCapture::Swap(_) => true,
-                    _ => senders.contains_key(&coin_id),
-                };
-
-                if should_process {
-                    let messages = self.handle_event(event).await?;
-                    info!("Message length is {:?}", messages.len());
-                    for message in messages {
-                        info!(
-                            "message type = {:?} coin_id = {:?}",
-                            message.message_type, message.coin.id
-                        );
-                        match message.message_type {
-                            SendMessageType::ALL => {
-                                for (_, sender) in senders.iter() {
-                                    match sender.0.send(message.clone()) {
-                                        Ok(_) => warn!("Message All sent successfully"),
-                                        Err(e) => warn!("Failed to send message: {:?}", e),
-                                    }
-                                }
-                            }
-                            SendMessageType::Regular => {
-                                if let Some(sender) = senders.get(&message.coin.id) {
-                                    info!(
-                                        "Sending Regular message for coin_id: {}",
-                                        message.coin.id
-                                    );
-                                    match sender.0.send(message.clone()) {
-                                        Ok(_) => info!(
-                                            "Regular message sent successfully for coin_id: {:?}",
-                                            message
-                                        ),
-                                        Err(e) => error!(
-                                            "Failed to send Regular message for coin_id: {}: {:?}",
-                                            message.coin.id, e
-                                        ),
-                                    }
-                                } else {
-                                    error!("No sender found for coin_id: {}", message.coin.id);
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    info!("Skipping event for coin_id: {}, no subscribers", coin_id);
-                }
+            if let Err(e) = self.handle_notification(notification).await {
+                error!("Error handling notification: {:?}", e);
             }
         }
+
         Ok(())
     }
 
-    async fn handle_event(&self, event: CoinEventCapture) -> Result<Vec<CoinMessage>> {
-        let result = match event {
-            CoinEventCapture::Coin(coin) => self.handle_coin_event(coin).map_ok(|m| m).await,
-            CoinEventCapture::Swap(swap) => self.handle_swap_event(swap).map_ok(|m| m).await,
-            CoinEventCapture::Chart(chart) => self.handle_chart_event(chart).map_ok(|m| m).await,
-            CoinEventCapture::Balance(balance) => {
-                self.handle_balance_event(balance).map_ok(|m| m).await
-            }
-            CoinEventCapture::Curve(curve) => self.handle_curve_event(curve).map_ok(|m| m).await,
-            CoinEventCapture::Thread(thread) => {
-                self.handle_thread_event(thread).map_ok(|m| m).await
-            }
+    async fn handle_notification(
+        &self,
+        notification: Result<PgNotification, sqlx::Error>,
+    ) -> Result<()> {
+        let notification = notification.context("Failed to get notification")?;
+
+        if self.total_channels.load(Ordering::Relaxed) == 0 {
+            return Ok(());
+        }
+
+        let payload: Value = serde_json::from_str(&notification.payload())
+            .context("Failed to parse notification payload")?;
+        let coin_id = payload["coin_id"].as_str().unwrap_or("").to_string();
+
+        let event = self.parse_event(notification.channel(), payload)?;
+        let senders = self.coin_senders.read().await;
+        let should_process = match &event {
+            CoinEventCapture::Coin(_) | CoinEventCapture::Swap(_) => true,
+            _ => senders.contains_key(&coin_id),
         };
 
-        match result {
-            Ok(messages) => {
-                info!("Successfully handled {} event(s)", messages.len());
-                Ok(messages)
-            }
-            Err(e) => {
-                error!("Error handling event: {:?}", e);
-                Err(e)
-            }
+        if !should_process {
+            debug!(
+                "Skipping event for coin_id: {}, no subscribers or non-relevant event type",
+                coin_id
+            );
+            return Ok(());
+        }
+
+        let message = self.handle_event(event).await?;
+        info!("Sending message for coin_id: {:?}\n", message);
+        self.send_message(message).await?;
+
+        Ok(())
+    }
+
+    fn parse_event(&self, channel: &str, payload: Value) -> Result<CoinEventCapture> {
+        match channel {
+            COIN => Ok(CoinEventCapture::Coin(Coin::from_value(payload)?)),
+            SWAP => Ok(CoinEventCapture::Swap(Swap::from_value(payload)?)),
+            CHART => Ok(CoinEventCapture::Chart(ChartWrapper::from_value(payload)?)),
+            BALANCE => Ok(CoinEventCapture::Balance(BalanceWrapper::from_value(
+                payload,
+            )?)),
+            CURVE => Ok(CoinEventCapture::Curve(Curve::from_value(payload)?)),
+            THREAD => Ok(CoinEventCapture::Thread(ThreadWrapper::from_value(
+                payload,
+            )?)),
+            _ => Err(anyhow::anyhow!("Unknown channel: {}", channel)),
         }
     }
-    async fn handle_coin_event(&self, coin: Coin) -> Result<Vec<CoinMessage>> {
+
+    async fn handle_event(&self, event: CoinEventCapture) -> Result<CoinMessage> {
+        match event {
+            CoinEventCapture::Coin(coin) => self.handle_coin_event(coin).await,
+            CoinEventCapture::Swap(swap) => self.handle_swap_event(swap).await,
+            CoinEventCapture::Chart(chart) => self.handle_chart_event(chart).await,
+            CoinEventCapture::Balance(balance) => self.handle_balance_event(balance).await,
+            CoinEventCapture::Curve(curve) => self.handle_curve_event(curve).await,
+            CoinEventCapture::Thread(thread) => self.handle_thread_event(thread).await,
+        }
+    }
+
+    async fn handle_coin_event(&self, coin: Coin) -> Result<CoinMessage> {
         let info_controller = InfoController::new(self.db.clone());
         let info = info_controller
             .get_coin_and_user_info(&coin.id, &coin.creator)
             .await?;
 
-        Ok(vec![CoinMessage::from_coin(coin, info)])
+        Ok(CoinMessage::from_coin(coin, info))
     }
-    async fn handle_swap_event(&self, swap: Swap) -> Result<Vec<CoinMessage>> {
+
+    async fn handle_swap_event(&self, swap: Swap) -> Result<CoinMessage> {
         let info_controller = InfoController::new(self.db.clone());
         let info = info_controller
             .get_coin_and_user_info(&swap.coin_id, &swap.sender)
             .await?;
 
-        Ok(vec![CoinMessage::from_swap(swap, info)])
+        Ok(CoinMessage::from_swap(swap, info))
     }
 
-    async fn handle_chart_event(&self, chart: ChartWrapper) -> Result<Vec<CoinMessage>> {
-        Ok(vec![CoinMessage::from_chart(chart)])
+    async fn handle_chart_event(&self, chart: ChartWrapper) -> Result<CoinMessage> {
+        Ok(CoinMessage::from_chart(chart))
     }
 
-    async fn handle_balance_event(&self, balance: BalanceWrapper) -> Result<Vec<CoinMessage>> {
-        Ok(vec![CoinMessage::from_balance(balance)])
+    async fn handle_balance_event(&self, balance: BalanceWrapper) -> Result<CoinMessage> {
+        Ok(CoinMessage::from_balance(balance))
     }
 
-    async fn handle_curve_event(&self, curve: Curve) -> Result<Vec<CoinMessage>> {
-        Ok(vec![CoinMessage::from_curve(curve)])
+    async fn handle_curve_event(&self, curve: Curve) -> Result<CoinMessage> {
+        Ok(CoinMessage::from_curve(curve))
     }
 
-    async fn handle_thread_event(&self, thread: ThreadWrapper) -> Result<Vec<CoinMessage>> {
-        // info!("Handling thread event {:?}", thread);
-        // Thread 이벤트 처리 로직
-        Ok(vec![CoinMessage::from_thread(thread)])
+    async fn handle_thread_event(&self, thread: ThreadWrapper) -> Result<CoinMessage> {
+        Ok(CoinMessage::from_thread(thread))
     }
+
+    async fn send_message(&self, message: CoinMessage) -> Result<()> {
+        let senders = self.coin_senders.read().await;
+
+        match message.message_type {
+            SendMessageType::ALL => {
+                for (_, sender) in senders.iter() {
+                    if let Err(e) = sender.0.send(message.clone()) {
+                        error!("Failed to send ALL message: {:?}", e);
+                    }
+                }
+            }
+            SendMessageType::Regular => {
+                if let Some(sender) = senders.get(&message.coin.id) {
+                    if let Err(e) = sender.0.send(message.clone()) {
+                        error!(
+                            "Failed to send Regular message for coin_id {}: {:?}",
+                            message.coin.id, e
+                        );
+                    }
+                } else {
+                    warn!("No sender found for coin_id: {}", message.coin.id);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     pub async fn get_coin_receiver(&self, coin_id: &str) -> CoinReceiver {
         let mut senders = self.coin_senders.write().await;
         let (sender, count) = senders.entry(coin_id.to_string()).or_insert_with(|| {
@@ -243,15 +252,13 @@ impl CoinEventProducer {
             self.total_channels.load(Ordering::SeqCst)
         );
 
-        let receiver = sender.subscribe();
-        info!("Created new receiver for coin_id: {}", coin_id);
-
         CoinReceiver {
-            receiver,
+            receiver: sender.subscribe(),
             coin_id: coin_id.to_string(),
-            controller: self.clone().into(),
+            controller: Arc::new(self.clone()),
         }
     }
+
     async fn decrement_receiver_count(&self, coin_id: &str) {
         let mut senders = self.coin_senders.write().await;
         if let Some((_, count)) = senders.get_mut(coin_id) {

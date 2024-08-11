@@ -38,7 +38,7 @@ impl CoinMessage {
         CoinMessage {
             message_type: SendMessageType::ALL,
             new_token: Some(NewTokenMessage {
-                creator: UserInfo {
+                user_info: UserInfo {
                     nickname: info.user_nickname,
                     image_uri: info.user_image_uri,
                 },

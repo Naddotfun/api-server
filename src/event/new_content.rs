@@ -29,7 +29,7 @@ use chrono::Utc;
 use futures::StreamExt;
 
 use serde_json::Value;
-use sqlx::postgres::PgListener;
+use sqlx::postgres::{PgListener, PgNotification};
 use tokio::{
     sync::{
         broadcast::{self, Receiver, Sender},
@@ -42,25 +42,19 @@ use tracing::{debug, error, info, instrument, warn};
 #[instrument(skip(producer))]
 pub async fn main(producer: Arc<NewContentEventProducer>) -> Result<()> {
     info!("Starting coin event capture");
-
     loop {
-        match producer.change_data_capture().await {
-            Ok(_) => {
-                warn!("Coin event capture completed unexpectedly");
-                break;
-            }
-            Err(e) => {
-                error!("Error in coin change_data_capture: {:?}", e);
-                info!("Retrying in 5 seconds...");
-                sleep(Duration::from_secs(5)).await;
-            }
+        if let Err(e) = producer.change_data_capture().await {
+            error!("Error in coin change_data_capture: {:?}", e);
+            info!("Retrying in 5 seconds...");
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        } else {
+            warn!("Coin event capture completed unexpectedly");
+            break;
         }
     }
-
     error!("Coin event capture ended");
     Ok(())
 }
-
 pub struct NewContentReceiver {
     receiver: Receiver<NewContentMessage>,
     controller: Arc<NewContentEventProducer>,
@@ -101,60 +95,52 @@ impl NewContentEventProducer {
         let mut listener = PgListener::connect_with(&self.db.pool).await?;
         listener.listen_all(vec![COIN, SWAP]).await?;
         let mut stream = listener.into_stream();
-        info!("New Content event  capture Start");
+        info!("New Content event capture started");
 
         while let Some(notification) = stream.next().await {
-            if let Ok(notification) = notification {
-                if self.total_channels.load(Ordering::Relaxed) == 0 {
-                    debug!("New Content No active channels");
-                    continue; // 총 채널 수가 0이면 다음 알림으로 넘어갑니다.
-                }
-
-                let payload: Value = serde_json::from_str(&notification.payload())?;
-
-                let event = match notification.channel() {
-                    COIN => NewContentCapture::NewToken(Coin::from_value(payload)?),
-                    SWAP => NewContentCapture::NewSwap(Swap::from_value(payload)?),
-                    _ => continue,
-                };
-
-                match self.handle_new_content(event).await {
-                    Ok(content_message) => {
-                        debug!("Handled event successfully");
-                        match self.content_sender.send(content_message) {
-                            Ok(receiver_count) => {
-                                debug!("Sent content message to {} receivers", receiver_count);
-                            }
-                            Err(e) => {
-                                warn!("Failed to send content message: {:?}", e);
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        warn!("Failed to handle event: {:?}", e);
-                        continue;
-                    }
-                }
-            }
+            self.handle_notification(notification).await?;
         }
-        error!("New Content Changing data capture end");
+
+        error!("New Content Changing data capture ended");
         Ok(())
     }
 
-    pub async fn handle_new_content(
+    async fn handle_notification(
         &self,
-        content: NewContentCapture,
-    ) -> Result<NewContentMessage> {
+        notification: Result<PgNotification, sqlx::Error>,
+    ) -> Result<()> {
+        let notification = notification.context("Failed to get notification")?;
+
+        if self.total_channels.load(Ordering::Relaxed) == 0 {
+            debug!("New Content: No active channels");
+            return Ok(());
+        }
+
+        let payload: Value = serde_json::from_str(&notification.payload())
+            .context("Failed to parse notification payload")?;
+
+        let event = match notification.channel() {
+            COIN => NewContentCapture::NewToken(Coin::from_value(payload)?),
+            SWAP => NewContentCapture::NewSwap(Swap::from_value(payload)?),
+            _ => return Ok(()),
+        };
+
+        let content_message = self.handle_new_content(event).await?;
+        self.send_content_message(content_message).await?;
+
+        Ok(())
+    }
+
+    async fn handle_new_content(&self, content: NewContentCapture) -> Result<NewContentMessage> {
+        let info_controller = InfoController::new(self.db.clone());
         match content {
             NewContentCapture::NewToken(coin) => {
-                let info_controller = InfoController::new(self.db.clone());
                 let info = info_controller
                     .get_coin_and_user_info(&coin.id, &coin.creator)
                     .await?;
                 Ok(NewContentMessage::from_coin(coin, info))
             }
             NewContentCapture::NewSwap(swap) => {
-                let info_controller = InfoController::new(self.db.clone());
                 let info = info_controller
                     .get_coin_and_user_info(&swap.coin_id, &swap.sender)
                     .await?;
@@ -162,6 +148,20 @@ impl NewContentEventProducer {
             }
         }
     }
+
+    async fn send_content_message(&self, content_message: NewContentMessage) -> Result<()> {
+        match self.content_sender.send(content_message) {
+            Ok(receiver_count) => {
+                debug!("Sent content message to {} receivers", receiver_count);
+                Ok(())
+            }
+            Err(e) => {
+                warn!("Failed to send content message: {:?}", e);
+                Err(anyhow::anyhow!("Failed to send content message"))
+            }
+        }
+    }
+
     pub async fn get_content_receiver(&self) -> NewContentReceiver {
         self.total_channels.fetch_add(1, Ordering::SeqCst);
         info!(
@@ -170,9 +170,10 @@ impl NewContentEventProducer {
         );
         NewContentReceiver {
             receiver: self.content_sender.subscribe(),
-            controller: self.clone().into(),
+            controller: Arc::new(self.clone()),
         }
     }
+
     async fn decrement_receiver_count(&self) {
         self.total_channels.fetch_sub(1, Ordering::SeqCst);
         info!(

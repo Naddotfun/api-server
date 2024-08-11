@@ -33,7 +33,7 @@ use chrono::Utc;
 use futures::{future::try_join_all, StreamExt};
 
 use serde_json::Value;
-use sqlx::postgres::PgListener;
+use sqlx::postgres::{PgListener, PgNotification};
 use tokio::{
     sync::{
         broadcast::{self, Receiver, Sender},
@@ -154,62 +154,80 @@ impl OrderEventProducer {
             .listen_all(vec![COIN, SWAP, CURVE, COIN_REPLIES_COUNT])
             .await?;
         let mut stream = listener.into_stream();
-        info!("Order event  capture Start");
+        info!("Order event capture Start");
 
         while let Some(notification) = stream.next().await {
             if let Ok(notification) = notification {
-                // info!("Notification {:?}", notification);
                 if self.total_channels.load(Ordering::Relaxed) == 0 {
-                    continue; // 총 채널 수가 0이면 다음 알림으로 넘어갑니다.
+                    continue;
                 }
-                info!("Changing data capture start");
-                let payload: Value = serde_json::from_str(&notification.payload())?;
-
-                let senders = self.order_senders.read().await;
-
-                let event = match notification.channel() {
-                    COIN => OrderEventCapture::CreationTime(Coin::from_value(payload)?),
-                    SWAP => OrderEventCapture::BumpOrder(Swap::from_value(payload)?),
-                    CURVE => OrderEventCapture::MartKetCap(Curve::from_value(payload)?),
-                    COIN_REPLIES_COUNT => {
-                        OrderEventCapture::ReplyChange(CoinReplyCount::from_value(payload)?)
+                let producer = self.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = producer.process_notification(notification).await {
+                        error!("Error processing notification: {:?}", e);
                     }
-                    _ => continue,
-                };
+                });
+            }
+        }
 
-                let handle_result = self.handle_order_event(event).await;
-                let messages = match handle_result {
-                    Ok(messages) => {
-                        debug!("Handled event successfully");
-                        messages
-                    }
-                    Err(e) => {
-                        warn!("Failed to handle event: {:?}", e);
-                        vec![]
-                    }
-                };
+        error!("Changing data capture end");
+        Ok(())
+    }
 
-                for message in messages {
-                    match message.message_type {
-                        SendMessageType::ALL => {
-                            // Broadcast to all connected users
-                            for (_, sender) in senders.iter() {
-                                debug!("Sending message to all");
-                                let _ = sender.0.send(message.clone());
-                            }
+    async fn process_notification(&self, notification: PgNotification) -> Result<()> {
+        let payload: Value = serde_json::from_str(&notification.payload())?;
+        let event = self.parse_event(notification.channel(), payload)?;
+
+        let messages = self.handle_order_event(event).await?;
+        self.broadcast_messages(messages).await?;
+
+        Ok(())
+    }
+
+    fn parse_event(&self, channel: &str, payload: Value) -> Result<OrderEventCapture> {
+        match channel {
+            COIN => Ok(OrderEventCapture::CreationTime(Coin::from_value(payload)?)),
+            SWAP => Ok(OrderEventCapture::BumpOrder(Swap::from_value(payload)?)),
+            CURVE => Ok(OrderEventCapture::MartKetCap(Curve::from_value(payload)?)),
+            COIN_REPLIES_COUNT => Ok(OrderEventCapture::ReplyChange(CoinReplyCount::from_value(
+                payload,
+            )?)),
+            _ => Err(anyhow::anyhow!("Unknown channel: {}", channel)),
+        }
+    }
+
+    async fn broadcast_messages(&self, messages: Vec<OrderMessage>) -> Result<()> {
+        let senders = self.order_senders.read().await;
+        for message in messages {
+            match message.message_type {
+                SendMessageType::ALL => {
+                    for (_, sender) in senders.iter() {
+                        if let Err(e) = sender.0.send(message.clone()) {
+                            warn!("Failed to send message: {:?}", e);
                         }
-                        SendMessageType::Regular => {
-                            // Send only to subscribers of this coin
-                            if let Some(sender) = senders.get(&message.order_type) {
-                                let _ = sender.0.send(message);
-                            }
+                    }
+                }
+                SendMessageType::Regular => {
+                    if let Some(sender) = senders.get(&message.order_type) {
+                        if let Err(e) = sender.0.send(message) {
+                            warn!("Failed to send message: {:?}", e);
                         }
                     }
                 }
             }
         }
-        error!("Changing data capture end");
         Ok(())
+    }
+
+    async fn handle_order_event(&self, event: OrderEventCapture) -> Result<Vec<OrderMessage>> {
+        match event {
+            OrderEventCapture::CreationTime(coin) => self.handle_creation_time_order(coin).await,
+            OrderEventCapture::BumpOrder(swap) => self.handle_bump_order(swap).await,
+            OrderEventCapture::MartKetCap(curve) => self.handle_market_cap_order(curve).await,
+            OrderEventCapture::ReplyChange(coin_reply) => {
+                self.handle_reply_change_order(coin_reply).await
+            }
+        }
     }
 
     //Handle redis save
@@ -296,31 +314,6 @@ impl OrderEventProducer {
             .add_to_reply_count_order(&coin, coin_reply.reply_count.to_string())
             .await?;
         Ok(if result { Some(coin) } else { None })
-    }
-
-    // Handle message
-
-    async fn handle_order_event(&self, event: OrderEventCapture) -> Result<Vec<OrderMessage>> {
-        match event {
-            OrderEventCapture::CreationTime(coin) => {
-                debug!("Coin creation time event {:?}", coin);
-
-                Ok(self.handle_creation_time_order(coin).await?)
-            }
-            OrderEventCapture::BumpOrder(swap) => {
-                debug!("Swap bump order event {:?}", swap);
-
-                Ok(self.handle_bump_order(swap).await?)
-            }
-            OrderEventCapture::MartKetCap(curve) => {
-                debug!("Curve market cap event {:?}", curve);
-                Ok(self.handle_market_cap_order(curve).await?)
-            }
-            OrderEventCapture::ReplyChange(coin_reply) => {
-                debug!("Coin latest reply count event {:?}", coin_reply);
-                Ok(self.handle_reply_change_order(coin_reply).await?)
-            }
-        }
     }
 
     async fn handle_creation_time_order(&self, coin: Coin) -> Result<Vec<OrderMessage>> {

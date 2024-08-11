@@ -34,7 +34,7 @@ pub enum SendMessageType {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewTokenMessage {
-    pub creator: UserInfo,
+    pub user_info: UserInfo,
     pub symbol: String,
     pub image_uri: String,
     pub created_at: i64,
@@ -43,7 +43,7 @@ pub struct NewTokenMessage {
 impl NewTokenMessage {
     pub fn new(order_token: &OrderTokenResponse) -> Self {
         NewTokenMessage {
-            creator: order_token.creator.clone(),
+            user_info: order_token.user_info.clone(),
             symbol: order_token.symbol.clone(),
             image_uri: order_token.image_uri.clone(),
             created_at: order_token.created_at.clone(),
@@ -55,7 +55,6 @@ impl NewTokenMessage {
 pub struct NewSwapMessage {
     pub trader_info: UserInfo,
     pub coin_info: CoinInfo,
-    #[serde(skip_serializing)]
     pub is_buy: bool,
     pub nad_amount: String,
 }
