@@ -10,7 +10,10 @@ use std::{
 use crate::{
     constant::change_channels::{COIN, SWAP},
     db::{
-        postgres::{controller::info::InfoController, PostgresDatabase},
+        postgres::{
+            controller::{info::InfoController, new_content::InitContentController},
+            PostgresDatabase,
+        },
         redis::RedisDatabase,
     },
     types::{
@@ -39,9 +42,21 @@ use tokio::{
 };
 use tracing::{debug, error, info, instrument, warn};
 
-#[instrument(skip(producer))]
-pub async fn main(producer: Arc<NewContentEventProducer>) -> Result<()> {
+#[instrument(skip(producer, redis))]
+pub async fn main(producer: Arc<NewContentEventProducer>, redis: Arc<RedisDatabase>) -> Result<()> {
     info!("Starting coin event capture");
+
+    let new_content_controller = InitContentController::new(producer.db.clone());
+    {
+        let latest_buy = new_content_controller.get_latest_buy().await?;
+        let latest_sell = new_content_controller.get_latest_sell().await?;
+        let latest_created_coin = new_content_controller.get_latest_new_token().await?;
+
+        redis.set_new_swap(&latest_buy).await?;
+        redis.set_new_swap(&latest_sell).await?;
+        redis.set_new_token(&latest_created_coin).await?;
+    }
+
     loop {
         if let Err(e) = producer.change_data_capture().await {
             error!("Error in coin change_data_capture: {:?}", e);
@@ -134,6 +149,7 @@ impl NewContentEventProducer {
         };
 
         let content_message = self.handle_new_content(event).await?;
+
         self.send_content_message(content_message).await?;
 
         Ok(())

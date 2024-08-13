@@ -28,7 +28,10 @@ async fn main() -> Result<()> {
     let new_content_producer = Arc::new(NewContentEventProducer::new(postgres.clone()));
     set.spawn(order::main(order_event_porducer.clone()));
     set.spawn(coin::main(coin_event_producer.clone()));
-    set.spawn(new_content::main(new_content_producer.clone()));
+    set.spawn(new_content::main(
+        new_content_producer.clone(),
+        redis.clone(),
+    ));
 
     set.spawn(server::main(
         postgres.clone(),
