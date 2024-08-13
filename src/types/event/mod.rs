@@ -53,16 +53,16 @@ impl NewTokenMessage {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewSwapMessage {
-    pub trader_info: UserInfo,
+    pub user_info: UserInfo,
     pub coin_info: CoinInfo,
     pub is_buy: bool,
     pub nad_amount: String,
 }
 
 impl NewSwapMessage {
-    pub fn new(order_token: &OrderTokenResponse, trader_info: UserInfo, swap: &Swap) -> Self {
+    pub fn new(order_token: &OrderTokenResponse, user_info: UserInfo, swap: &Swap) -> Self {
         NewSwapMessage {
-            trader_info,
+            user_info,
             coin_info: CoinInfo {
                 symbol: order_token.symbol.clone(),
                 image_uri: order_token.image_uri.clone(),

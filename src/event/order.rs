@@ -370,7 +370,6 @@ impl OrderEventProducer {
                     new_token: None,
                     new_buy: Some(new_swap_message),
                     new_sell: None,
-
                     order_type: OrderType::Bump,
                     order_token: Some(vec![order_token_response.clone()]),
                 };
@@ -382,7 +381,6 @@ impl OrderEventProducer {
                     new_token: None,
                     new_buy: None,
                     new_sell: Some(new_swap_message),
-                    // new_swap: Some(new_swap_message),
                     order_type: OrderType::Bump,
                     order_token: Some(vec![order_token_response.clone()]),
                 };

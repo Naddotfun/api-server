@@ -100,9 +100,12 @@ impl CoinEventProducer {
         info!("Coin event capture started");
 
         while let Some(notification) = stream.next().await {
-            if let Err(e) = self.handle_notification(notification).await {
-                error!("Error handling notification: {:?}", e);
-            }
+            let producer = self.clone();
+            tokio::spawn(async move {
+                if let Err(e) = producer.handle_notification(notification).await {
+                    error!("Error handling notification: {:?}", e);
+                }
+            });
         }
 
         Ok(())
@@ -120,6 +123,7 @@ impl CoinEventProducer {
 
         let payload: Value = serde_json::from_str(&notification.payload())
             .context("Failed to parse notification payload")?;
+
         let coin_id = payload["coin_id"].as_str().unwrap_or("").to_string();
 
         let event = self.parse_event(notification.channel(), payload)?;
@@ -138,13 +142,14 @@ impl CoinEventProducer {
         }
 
         let message = self.handle_event(event).await?;
-        info!("Sending message for coin_id: {:?}\n", message);
+        // info!("Sending message for coin_id: {:?}\n", message);
         self.send_message(message).await?;
 
         Ok(())
     }
 
     fn parse_event(&self, channel: &str, payload: Value) -> Result<CoinEventCapture> {
+        info!("Channel = {}, Payload = {:?}", channel, payload);
         match channel {
             COIN => Ok(CoinEventCapture::Coin(Coin::from_value(payload)?)),
             SWAP => Ok(CoinEventCapture::Swap(Swap::from_value(payload)?)),
@@ -161,14 +166,17 @@ impl CoinEventProducer {
     }
 
     async fn handle_event(&self, event: CoinEventCapture) -> Result<CoinMessage> {
-        match event {
+        let message = match event {
             CoinEventCapture::Coin(coin) => self.handle_coin_event(coin).await,
             CoinEventCapture::Swap(swap) => self.handle_swap_event(swap).await,
             CoinEventCapture::Chart(chart) => self.handle_chart_event(chart).await,
             CoinEventCapture::Balance(balance) => self.handle_balance_event(balance).await,
             CoinEventCapture::Curve(curve) => self.handle_curve_event(curve).await,
             CoinEventCapture::Thread(thread) => self.handle_thread_event(thread).await,
-        }
+        };
+
+        // info!("Message = {:?}", message);
+        message
     }
 
     async fn handle_coin_event(&self, coin: Coin) -> Result<CoinMessage> {
@@ -194,6 +202,7 @@ impl CoinEventProducer {
     }
 
     async fn handle_balance_event(&self, balance: BalanceWrapper) -> Result<CoinMessage> {
+        info!("Handling balance event: {:?}", balance);
         Ok(CoinMessage::from_balance(balance))
     }
 

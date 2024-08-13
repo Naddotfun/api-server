@@ -322,15 +322,4 @@ impl RedisDatabase {
             None => Ok(None),
         }
     }
-    // pub async fn get_new_swap(&self) -> Result<Option<NewSwapMessage>> {
-    //     let mut conn = self.client.get_multiplexed_async_connection().await?;
-    //     let value: Option<String> = conn.get(*NEW_SWAP_KEY).await?;
-    //     match value {
-    //         Some(v) => {
-    //             let new_swap = serde_json::from_str(&v).context("Failed to parse new swap")?;
-    //             Ok(Some(new_swap))
-    //         }
-    //         None => Ok(None),
-    //     }
-    // }
 }

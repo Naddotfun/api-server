@@ -47,7 +47,7 @@ pub struct OrderMessage {
     pub new_buy: Option<NewSwapMessage>,
 
     pub new_sell: Option<NewSwapMessage>,
-
+    #[serde(skip)]
     pub order_type: OrderType,
 
     pub order_token: Option<Vec<OrderTokenResponse>>,

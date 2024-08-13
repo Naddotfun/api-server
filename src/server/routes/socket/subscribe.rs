@@ -106,7 +106,11 @@ pub async fn handle_order_subscribe(
         .await;
 
     let handle = tokio::spawn(async move {
-        while let Some(event) = receiver.recv().await {
+        let subscribed_order_type = order_type.clone();
+        while let Some(mut event) = receiver.recv().await {
+            if event.order_type != subscribed_order_type {
+                event.order_token = None;
+            }
             if let Err(e) = send_success_response(&tx, request.method(), json!(event)).await {
                 error!("Failed to send order event: {:?}", e);
                 break;
@@ -132,7 +136,7 @@ pub async fn handle_coin_subscribe(
             .ok_or_else(|| anyhow::anyhow!("Invalid or missing chart"))?,
     )
     .map_err(|e| anyhow::anyhow!("Failed to parse chart type: {}", e))?;
-    info!("Chart type ={:?}", chart_type);
+    // info!("Chart type ={:?}", chart_type);
 
     //이제 여기서 부터 coin 에 대한 데이터를 가지고 와서 보내주는 코드 작성해야함.
 
@@ -150,7 +154,7 @@ pub async fn handle_coin_subscribe(
     let coin_data = coin_page_controller
         .get_coin_message(&coin_id, chart_type.clone())
         .await?;
-    info!("Coin data is :{:?}", coin_data);
+    // info!("Coin data is :{:?}", coin_data);
     let message = CoinMessage {
         message_type: SendMessageType::ALL,
         new_token,
@@ -195,7 +199,7 @@ pub async fn handle_coin_subscribe(
             }
         }
     });
-    info!("Receiver loop ended for coin_id: {}", coin_id);
+    // info!("Receiver loop ended for coin_id: {}", coin_id);
     Ok(handle)
 }
 

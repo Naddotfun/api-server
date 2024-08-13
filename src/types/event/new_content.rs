@@ -32,7 +32,7 @@ impl NewContentMessage {
             true => NewContentMessage {
                 new_token: None,
                 new_buy: Some(NewSwapMessage {
-                    trader_info: UserInfo {
+                    user_info: UserInfo {
                         nickname: info.user_nickname,
                         image_uri: info.user_image_uri,
                     },
@@ -49,7 +49,7 @@ impl NewContentMessage {
                 new_token: None,
                 new_buy: None,
                 new_sell: Some(NewSwapMessage {
-                    trader_info: UserInfo {
+                    user_info: UserInfo {
                         nickname: info.user_nickname,
                         image_uri: info.user_image_uri,
                     },

@@ -6,7 +6,7 @@ use crate::{
 use anyhow::{Context, Result};
 use serde_json::Value;
 use std::sync::Arc;
-use tracing::info;
+
 #[derive(sqlx::FromRow)]
 struct CoinResponseRaw {
     swap: Option<Value>,

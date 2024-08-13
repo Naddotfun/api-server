@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize, Serializer};
 use serde_json::Value;
 use sqlx;
+use tracing::info;
 use utoipa::ToSchema;
 
 // Helper function for BigDecimal serialization
@@ -59,6 +60,7 @@ pub struct Curve {
     pub coin_id: String,
     pub virtual_nad: BigDecimal,
     pub virtual_token: BigDecimal,
+    pub reserve_token: BigDecimal,
     pub latest_trade_at: i64,
     #[serde(serialize_with = "serialize_price_bigdecimal")]
     pub price: BigDecimal,
@@ -92,7 +94,7 @@ pub struct Chart {
     pub high_price: BigDecimal,
     #[serde(serialize_with = "serialize_price_bigdecimal")]
     pub low_price: BigDecimal,
-    pub created_at: i64,
+    pub time_stamp: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
@@ -179,7 +181,11 @@ pub struct BalanceWrapper {
 
 impl BalanceWrapper {
     pub fn from_value(value: Value) -> Result<BalanceWrapper> {
-        serde_json::from_value(value).context("Failed to deserialize BalanceWrapper")
+        let value = serde_json::from_value(value).context("Failed to deserialize BalanceWrapper");
+
+        info!("value: {:?}", value);
+
+        value
     }
 }
 

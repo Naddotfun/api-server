@@ -1,4 +1,4 @@
-use std::{env, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::Result;
 
@@ -10,18 +10,14 @@ use api_server::{
         order::{self, OrderEventProducer},
     },
     server,
-    types::event::order::OrderMessage,
 };
-use tokio::{
-    sync::broadcast::{self, Receiver, Sender},
-    task::JoinSet,
-};
+use tokio::task::JoinSet;
 use tracing::{info, warn};
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenv::dotenv().ok();
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
+        .with_max_level(tracing::Level::INFO)
         .init();
     let mut set = JoinSet::new();
     let postgres = Arc::new(PostgresDatabase::new().await);
@@ -33,8 +29,6 @@ async fn main() -> Result<()> {
     set.spawn(order::main(order_event_porducer.clone()));
     set.spawn(coin::main(coin_event_producer.clone()));
     set.spawn(new_content::main(new_content_producer.clone()));
-    // let global_event_controller = Arc::new(GlobalEventController::new(100));
-    // set.spawn(coin::main(coin_event_producer.clone(), postgres.clone()));
 
     set.spawn(server::main(
         postgres.clone(),

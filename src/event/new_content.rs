@@ -97,8 +97,16 @@ impl NewContentEventProducer {
         let mut stream = listener.into_stream();
         info!("New Content event capture started");
 
+        // while let Some(notification) = stream.next().await {
+        //     self.handle_notification(notification).await?;
+        // }
         while let Some(notification) = stream.next().await {
-            self.handle_notification(notification).await?;
+            let producer = self.clone();
+            tokio::spawn(async move {
+                if let Err(e) = producer.handle_notification(notification).await {
+                    error!("Error handling notification: {:?}", e);
+                }
+            });
         }
 
         error!("New Content Changing data capture ended");
