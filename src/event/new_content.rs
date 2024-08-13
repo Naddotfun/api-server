@@ -44,10 +44,11 @@ use tracing::{debug, error, info, instrument, warn};
 
 #[instrument(skip(producer, redis))]
 pub async fn main(producer: Arc<NewContentEventProducer>, redis: Arc<RedisDatabase>) -> Result<()> {
-    info!("Starting coin event capture");
+    info!("Starting new_content event capture");
 
     let new_content_controller = InitContentController::new(producer.db.clone());
     {
+        info!("New Content Initializing");
         let latest_buy = new_content_controller.get_latest_buy().await?;
         let latest_sell = new_content_controller.get_latest_sell().await?;
         let latest_created_coin = new_content_controller.get_latest_new_token().await?;
