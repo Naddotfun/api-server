@@ -49,15 +49,28 @@ pub async fn main(producer: Arc<NewContentEventProducer>, redis: Arc<RedisDataba
     let new_content_controller = InitContentController::new(producer.db.clone());
     {
         info!("New Content Initializing");
-        let latest_buy = new_content_controller.get_latest_buy().await?;
-        let latest_sell = new_content_controller.get_latest_sell().await?;
-        let latest_created_coin = new_content_controller.get_latest_new_token().await?;
 
-        redis.set_new_swap(&latest_buy).await?;
-        redis.set_new_swap(&latest_sell).await?;
-        redis.set_new_token(&latest_created_coin).await?;
+        if let Some(latest_buy) = new_content_controller.get_latest_buy().await? {
+            info!("Latest buy: {:?}", latest_buy);
+            redis.set_new_swap(&latest_buy).await?;
+        } else {
+            info!("No latest buy found");
+        }
+
+        if let Some(latest_sell) = new_content_controller.get_latest_sell().await? {
+            info!("Latest sell: {:?}", latest_sell);
+            redis.set_new_swap(&latest_sell).await?;
+        } else {
+            info!("No latest sell found");
+        }
+
+        if let Some(latest_created_coin) = new_content_controller.get_latest_new_token().await? {
+            info!("Latest created coin: {:?}", latest_created_coin);
+            redis.set_new_token(&latest_created_coin).await?;
+        } else {
+            info!("No latest created coin found");
+        }
     }
-
     loop {
         if let Err(e) = producer.change_data_capture().await {
             error!("Error in coin change_data_capture: {:?}", e);

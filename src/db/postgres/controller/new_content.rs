@@ -1,4 +1,5 @@
 use anyhow::Result;
+use tracing::info;
 
 use std::sync::Arc;
 
@@ -16,7 +17,7 @@ impl InitContentController {
         InitContentController { db }
     }
 
-    pub async fn get_latest_buy(&self) -> Result<NewSwapMessage> {
+    pub async fn get_latest_buy(&self) -> Result<Option<NewSwapMessage>> {
         let result = sqlx::query!(
             r#"
             SELECT
@@ -34,24 +35,24 @@ impl InitContentController {
             LIMIT 1
             "#
         )
-        .fetch_one(&self.db.pool)
+        .fetch_optional(&self.db.pool)
         .await?;
 
-        Ok(NewSwapMessage {
+        Ok(result.map(|row| NewSwapMessage {
             user_info: UserInfo {
-                nickname: result.user_nickname,
-                image_uri: result.user_image_uri,
+                nickname: row.user_nickname,
+                image_uri: row.user_image_uri,
             },
             coin_info: CoinInfo {
-                symbol: result.coin_symbol,
-                image_uri: result.coin_image_uri,
+                symbol: row.coin_symbol,
+                image_uri: row.coin_image_uri,
             },
-            is_buy: result.is_buy,
-            nad_amount: result.nad_amount.to_string(),
-        })
+            is_buy: row.is_buy,
+            nad_amount: row.nad_amount.to_string(),
+        }))
     }
 
-    pub async fn get_latest_sell(&self) -> Result<NewSwapMessage> {
+    pub async fn get_latest_sell(&self) -> Result<Option<NewSwapMessage>> {
         let result = sqlx::query!(
             r#"
             SELECT
@@ -69,23 +70,24 @@ impl InitContentController {
             LIMIT 1
             "#
         )
-        .fetch_one(&self.db.pool)
+        .fetch_optional(&self.db.pool)
         .await?;
 
-        Ok(NewSwapMessage {
+        Ok(result.map(|row| NewSwapMessage {
             user_info: UserInfo {
-                nickname: result.user_nickname,
-                image_uri: result.user_image_uri,
+                nickname: row.user_nickname,
+                image_uri: row.user_image_uri,
             },
             coin_info: CoinInfo {
-                symbol: result.coin_symbol,
-                image_uri: result.coin_image_uri,
+                symbol: row.coin_symbol,
+                image_uri: row.coin_image_uri,
             },
-            is_buy: result.is_buy,
-            nad_amount: result.nad_amount.to_string(),
-        })
+            is_buy: row.is_buy,
+            nad_amount: row.nad_amount.to_string(),
+        }))
     }
-    pub async fn get_latest_new_token(&self) -> Result<NewTokenMessage> {
+
+    pub async fn get_latest_new_token(&self) -> Result<Option<NewTokenMessage>> {
         let result = sqlx::query!(
             r#"
             SELECT 
@@ -100,17 +102,17 @@ impl InitContentController {
             LIMIT 1
             "#
         )
-        .fetch_one(&self.db.pool)
+        .fetch_optional(&self.db.pool)
         .await?;
 
-        Ok(NewTokenMessage {
+        Ok(result.map(|row| NewTokenMessage {
             user_info: UserInfo {
-                nickname: result.user_nickname,
-                image_uri: result.user_image_uri,
+                nickname: row.user_nickname,
+                image_uri: row.user_image_uri,
             },
-            symbol: result.symbol,
-            image_uri: result.coin_image_uri,
-            created_at: result.created_at,
-        })
+            symbol: row.symbol,
+            image_uri: row.coin_image_uri,
+            created_at: row.created_at,
+        }))
     }
 }
