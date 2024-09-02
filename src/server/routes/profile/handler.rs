@@ -2,8 +2,8 @@ use crate::{
     db::postgres::controller::profile::ProfileController,
     server::{result::AppJsonResult, state::AppState},
     types::{
-        model::{Account, Coin, Thread},
-        profile::{HoldCoin, Identifier},
+        model::{Account, Thread, Token},
+        profile::{HoldToken, Identifier},
     },
 };
 
@@ -22,16 +22,16 @@ pub struct ProfileResponse {
     account: Account,
 }
 #[derive(ToSchema, Serialize)]
-pub struct HeldCoinsResponse {
-    coins: Vec<HoldCoin>,
+pub struct HeldTokensResponse {
+    tokens: Vec<HoldToken>,
 }
 #[derive(ToSchema, Serialize)]
 pub struct RepliesResponse {
     replies: Vec<Thread>,
 }
 #[derive(ToSchema, Serialize)]
-pub struct CreatedCoinsResponse {
-    coins: Vec<Coin>,
+pub struct CreatedTokensResponse {
+    tokens: Vec<Token>,
 }
 
 #[derive(ToSchema, Serialize)]
@@ -77,32 +77,32 @@ pub async fn get_profile(
     Ok(Json(ProfileResponse { account }))
 }
 
-/// Get user's held coins
+/// Get user's held tokens
 #[utoipa::path(
     get,
-    path = ProfilePath::CoinHeld.docs_str(),
+    path = ProfilePath::TokenHeld.docs_str(),
     params(
         ("user" = String, Path, description = "User's nickname or Ethereum address")
     ),
     responses(
-        (status = 200, description = "User's held coins retrieved successfully", body = HeldCoinsResponse),
+        (status = 200, description = "User's held tokens retrieved successfully", body = HeldTokensResponse),
         (status = 404, description = "User not found"),
         (status = 500, description = "Internal server error")
     ),
     tag = "Profile"
 )]
-pub async fn get_coins_held(
+pub async fn get_tokens_held(
     Path(user): Path<String>,
     State(state): State<AppState>,
-) -> AppJsonResult<HeldCoinsResponse> {
+) -> AppJsonResult<HeldTokensResponse> {
     let profile_controller = ProfileController::new(state.postgres.clone());
     let identifier = if is_address(&user) {
         Identifier::Address(user)
     } else {
         Identifier::Nickname(user)
     };
-    let coins = profile_controller.get_holding_coin(&identifier).await?;
-    Ok(Json(HeldCoinsResponse { coins }))
+    let tokens = profile_controller.get_holding_token(&identifier).await?;
+    Ok(Json(HeldTokensResponse { tokens }))
 }
 
 /// Get user's replies
@@ -133,32 +133,32 @@ pub async fn get_replies(
     Ok(Json(RepliesResponse { replies }))
 }
 
-/// Get coins created by user
+/// Get tokens created by user
 #[utoipa::path(
     get,
-    path = ProfilePath::CoinCreated.docs_str(),
+    path = ProfilePath::TokenCreated.docs_str(),
     params(
         ("user" = String, Path, description = "User's nickname or Ethereum address")
     ),
     responses(
-        (status = 200, description = "Created coins retrieved successfully", body = CreatedCoinsResponse),
+        (status = 200, description = "Created tokens retrieved successfully", body = CreatedTokensResponse),
         (status = 404, description = "User not found"),
         (status = 500, description = "Internal server error")
     ),
     tag = "Profile"
 )]
-pub async fn get_created_coins(
+pub async fn get_created_tokens(
     Path(user): Path<String>,
     State(state): State<AppState>,
-) -> AppJsonResult<CreatedCoinsResponse> {
+) -> AppJsonResult<CreatedTokensResponse> {
     let profile_controller = ProfileController::new(state.postgres.clone());
     let identifier = if is_address(&user) {
         Identifier::Address(user)
     } else {
         Identifier::Nickname(user)
     };
-    let coins = profile_controller.get_created_coins(&identifier).await?;
-    Ok(Json(CreatedCoinsResponse { coins }))
+    let tokens = profile_controller.get_created_tokens(&identifier).await?;
+    Ok(Json(CreatedTokensResponse { tokens }))
 }
 
 /// Get user's followers

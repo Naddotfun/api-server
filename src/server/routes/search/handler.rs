@@ -8,11 +8,11 @@ use super::path::Path as SearchPath;
 use crate::db::postgres::controller::order::OrderController;
 use crate::server::result::AppJsonResult;
 use crate::types::event::order::OrderTokenResponse;
-use crate::{server::state::AppState, types::model::Coin};
+use crate::{server::state::AppState, types::model::Token};
 
 #[derive(Debug, Serialize, ToSchema)]
 #[schema(example = json!({
-    "token_name": "coin name or symbol"
+    "token_name": "token name or symbol"
 }))]
 pub struct SearchResponse {
     // #[schema(example = "token_name or symbol")]

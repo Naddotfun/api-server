@@ -3,7 +3,7 @@ RETURNS trigger AS $$
 BEGIN
     PERFORM pg_notify('balance_change', json_build_object(
         'operation', TG_OP,
-        'coin_id', NEW.coin_id,
+        'token_id', NEW.token_id,
         'record', row_to_json(NEW)
     )::text);
 

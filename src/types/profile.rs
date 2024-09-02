@@ -2,7 +2,7 @@ use bigdecimal::BigDecimal;
 use serde::Serialize;
 use utoipa::ToSchema;
 
-use super::model::Coin;
+use super::model::Token;
 
 pub enum Identifier {
     Nickname(String),
@@ -10,8 +10,8 @@ pub enum Identifier {
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
-pub struct HoldCoin {
-    pub coin: Coin,
+pub struct HoldToken {
+    pub token: Token,
     pub balance: String,
     pub price: String,
 }

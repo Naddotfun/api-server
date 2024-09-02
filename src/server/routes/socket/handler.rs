@@ -33,11 +33,11 @@ use crate::server::{
 
 use super::{
     json_rpc::{JsonRpcMethod, JsonRpcRequest},
-    subscribe::{handle_coin_subscribe, handle_order_subscribe},
+    subscribe::{handle_order_subscribe, handle_token_subscribe},
 };
 enum ActiveSubscription {
     Order(JoinHandle<()>),
-    Coin(JoinHandle<()>),
+    Token(JoinHandle<()>),
     NewContent(JoinHandle<()>),
     None,
 }
@@ -90,7 +90,7 @@ pub async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState)
         }
         // Cancel the active subscription if any
         if let ActiveSubscription::Order(handle)
-        | ActiveSubscription::Coin(handle)
+        | ActiveSubscription::Token(handle)
         | ActiveSubscription::NewContent(handle) = active_subscription
         {
             handle.abort();
@@ -135,15 +135,15 @@ async fn handle_message(
                     *active_subscription = ActiveSubscription::Order(new_handle);
                     Ok(())
                 }
-                JsonRpcMethod::CoinSubscribe => {
+                JsonRpcMethod::TokenSubscribe => {
                     // Cancel any existing subscription
-                    if let ActiveSubscription::Coin(handle) =
+                    if let ActiveSubscription::Token(handle) =
                         std::mem::replace(active_subscription, ActiveSubscription::None)
                     {
                         handle.abort();
                     }
-                    let new_handle = handle_coin_subscribe(request, state, tx.clone()).await?;
-                    *active_subscription = ActiveSubscription::Coin(new_handle);
+                    let new_handle = handle_token_subscribe(request, state, tx.clone()).await?;
+                    *active_subscription = ActiveSubscription::Token(new_handle);
                     Ok(())
                 }
                 JsonRpcMethod::NewContentSubscribe => {

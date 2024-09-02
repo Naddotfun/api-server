@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use super::{NewSwapMessage, NewTokenMessage, SendMessageType, UserInfo};
-use crate::types::model::{Coin, CoinReplyCount, Curve, Swap};
+use crate::types::model::{Curve, Swap, Token, TokenReplyCount};
 use serde::{Deserialize, Serialize};
 
 use sqlx::FromRow;
@@ -31,7 +31,7 @@ impl FromStr for OrderType {
             "market_cap" => Ok(OrderType::MarketCap),
             "bump" => Ok(OrderType::Bump),
             "reply_count" => Ok(OrderType::ReplyCount),
-            "lastest_reply" => Ok(OrderType::LatestReply),
+            "latest_reply" => Ok(OrderType::LatestReply),
             _ => Err(anyhow::anyhow!("Invalid order type: {}", s)),
         }
     }
@@ -39,29 +39,19 @@ impl FromStr for OrderType {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct OrderMessage {
-    #[serde(skip)]
-    pub message_type: SendMessageType,
-
-    pub new_token: Option<NewTokenMessage>,
-
-    pub new_buy: Option<NewSwapMessage>,
-
-    pub new_sell: Option<NewSwapMessage>,
-    #[serde(skip)]
     pub order_type: OrderType,
-
     pub order_token: Option<Vec<OrderTokenResponse>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct OrderTokenResponse {
-    pub id: String,          //coin.id
-    pub user_info: UserInfo, //coin 의 creator -> account table -> select nickname, image uri
-    pub name: String,        // coin.name
-    pub symbol: String,      //coin.symbol
-    pub image_uri: String,   // coin.image_uri
-    pub description: String, //coin.description
-    pub reply_count: String, //coin.id -> coin_reply_count table -> select count
-    pub price: String,       // coin.id -> curve table -> select price
+    pub id: String,          //token.id
+    pub user_info: UserInfo, //token 의 creator -> account table -> select nickname, image uri
+    pub name: String,        // token.name
+    pub symbol: String,      //token.symbol
+    pub image_uri: String,   // token.image_uri
+    pub description: String, //token.description
+    pub reply_count: String, //token.id -> token_reply_count table -> select count
+    pub price: String,       // token.id -> curve table -> select price
     pub created_at: i64,
 }

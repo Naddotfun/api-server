@@ -12,15 +12,15 @@ use tracing::error;
 use tracing::info;
 use tracing::warn;
 
-use crate::db::postgres::controller::coinpage::CoinPageController;
+use crate::db::postgres::controller::tokenpage::TokenPageController;
 
 use crate::server::state::AppState;
 
 use crate::types::chart_type::ChartType;
-use crate::types::event::coin::CoinMessage;
 use crate::types::event::new_content::NewContentMessage;
 use crate::types::event::order::OrderMessage;
 use crate::types::event::order::OrderType;
+use crate::types::event::token::TokenMessage;
 use crate::types::event::NewSwapMessage;
 use crate::types::event::NewTokenMessage;
 use crate::types::event::SendMessageType;
@@ -72,6 +72,7 @@ pub async fn handle_order_subscribe(
     state: &AppState,
     tx: Sender<Message>,
 ) -> Result<JoinHandle<()>> {
+    info!("Order subscribe");
     let order_type = parse_order_type(request.params())
         .ok_or_else(|| anyhow::anyhow!("Invalid or missing order type"))?;
 
@@ -81,17 +82,7 @@ pub async fn handle_order_subscribe(
         .await
         .context("Failed to get initial order")?;
 
-    let NewContent {
-        new_token,
-        new_buy,
-        new_sell,
-    } = NewContent::new(state).await;
-
     let message = OrderMessage {
-        message_type: SendMessageType::ALL,
-        new_token,
-        new_buy,
-        new_sell,
         order_type,
         order_token: Some(order),
     };
@@ -106,11 +97,9 @@ pub async fn handle_order_subscribe(
         .await;
 
     let handle = tokio::spawn(async move {
-        let subscribed_order_type = order_type.clone();
-        while let Some(mut event) = receiver.recv().await {
-            if event.order_type != subscribed_order_type {
-                event.order_token = None;
-            }
+        // let subscribed_order_type = order_type.clone();
+        while let Some(event) = receiver.recv().await {
+            info!("Received order event: {:?}", event);
             if let Err(e) = send_success_response(&tx, request.method(), json!(event)).await {
                 error!("Failed to send order event: {:?}", e);
                 break;
@@ -123,56 +112,47 @@ pub async fn handle_order_subscribe(
     Ok(handle)
 }
 
-pub async fn handle_coin_subscribe(
+pub async fn handle_token_subscribe(
     request: JsonRpcRequest,
     state: &AppState,
     tx: Sender<Message>,
 ) -> Result<JoinHandle<()>> {
-    info!("Coin subscribe");
-    let coin_id = parse_coin_id(request.params())
-        .ok_or_else(|| anyhow::anyhow!("Invalid or missing coin ID"))?;
+    info!("Token subscribe");
+    let token_id = parse_token_id(request.params())
+        .ok_or_else(|| anyhow::anyhow!("Invalid or missing token ID"))?;
     let chart_type = ChartType::from_str(
         &parse_chart(request.params())
             .ok_or_else(|| anyhow::anyhow!("Invalid or missing chart"))?,
     )
     .map_err(|e| anyhow::anyhow!("Failed to parse chart type: {}", e))?;
-    // info!("Chart type ={:?}", chart_type);
 
-    //이제 여기서 부터 coin 에 대한 데이터를 가지고 와서 보내주는 코드 작성해야함.
+    let token_page_controller = TokenPageController::new(state.postgres.clone());
 
-    //먼저 레디스에 접근해서 coin_id 에 해당하는 coin 정보 가져옴.
-    //없으면 postgres 에서 가져와서 redis 에 저장함.
-
-    let NewContent {
-        new_token,
-        new_buy,
-        new_sell,
-    } = NewContent::new(state).await;
-
-    let coin_page_controller = CoinPageController::new(state.postgres.clone());
-
-    let coin_data = coin_page_controller
-        .get_coin_message(&coin_id, chart_type.clone())
+    let token_data = token_page_controller
+        .get_token_message(&token_id, chart_type.clone())
         .await?;
-    // info!("Coin data is :{:?}", coin_data);
-    let message = CoinMessage {
-        message_type: SendMessageType::ALL,
-        new_token,
-        new_buy,
-        new_sell,
-        coin: coin_data,
+    // info!("Token data is :{:?}", token_data);
+    let message = TokenMessage {
+        // message_type: SendMessageType::ALL,
+        // new_token,
+        // new_buy,
+        // new_sell,
+        token: token_data,
     };
-    let message_json = serde_json::to_value(message).context("Failed to serialize coin")?;
+    let message_json = serde_json::to_value(message).context("Failed to serialize token")?;
     send_success_response(&tx, request.method(), json!(message_json)).await?;
 
     // 메시지 수신 부분
 
-    let mut receiver = state.coin_event_producer.get_coin_receiver(&coin_id).await;
+    let mut receiver = state
+        .token_event_producer
+        .get_token_receiver(&token_id)
+        .await;
     let handle = tokio::spawn(async move {
         while let Some(message) = receiver.recv().await {
-            debug!("Received new coin message");
+            debug!("Received new token message");
 
-            let should_send = match &message.coin.chart {
+            let should_send = match &message.token.chart {
                 None => {
                     debug!("Chart is None, sending message");
                     true
@@ -193,13 +173,13 @@ pub async fn handle_coin_subscribe(
 
             if should_send {
                 if let Err(e) = send_success_response(&tx, request.method(), json!(message)).await {
-                    error!("Failed to send coin event: {:?}", e);
+                    error!("Failed to send token event: {:?}", e);
                     break;
                 }
             }
         }
     });
-    // info!("Receiver loop ended for coin_id: {}", coin_id);
+    // info!("Receiver loop ended for token_id: {}", token_id);
     Ok(handle)
 }
 
@@ -219,7 +199,7 @@ pub async fn handle_new_content_subscribe(
         new_buy,
         new_sell,
     };
-    let message_json = serde_json::to_value(message).context("Failed to serialize coin")?;
+    let message_json = serde_json::to_value(message).context("Failed to serialize token")?;
     send_success_response(&tx, request.method(), json!(message_json)).await?;
     let mut receiver = state.new_content_producer.get_content_receiver().await;
 
@@ -250,11 +230,11 @@ fn parse_order_type(params: Option<&Value>) -> Option<OrderType> {
     }
 }
 
-fn parse_coin_id(params: Option<&Value>) -> Option<String> {
+fn parse_token_id(params: Option<&Value>) -> Option<String> {
     match params {
         Some(Value::String(s)) => Some(s.clone()),
         Some(Value::Object(obj)) => obj
-            .get("coin_id")
+            .get("token_id")
             .and_then(|v| v.as_str())
             .map(|s| s.to_owned()),
         _ => None,

@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crate::{
     db::postgres::PostgresDatabase,
-    types::event::{CoinAndUserInfo, CoinInfo, UserInfo},
+    types::event::{TokenAndUserInfo, TokenInfo, UserInfo},
 };
 
 pub struct InfoController {
@@ -26,41 +26,41 @@ impl InfoController {
         .await?;
         Ok(creator)
     }
-    pub async fn get_coin_info(&self, coin_id: &str) -> Result<CoinInfo> {
-        let coin_info = sqlx::query_as!(
-            CoinInfo,
-            "SELECT symbol, image_uri FROM coin WHERE id = $1",
-            coin_id
+    pub async fn get_token_info(&self, token_id: &str) -> Result<TokenInfo> {
+        let token_info = sqlx::query_as!(
+            TokenInfo,
+            "SELECT id,symbol, image_uri FROM token WHERE id = $1",
+            token_id
         )
         .fetch_one(&self.db.pool)
         .await?;
 
-        Ok(coin_info)
+        Ok(token_info)
     }
 
-    pub async fn get_coin_and_user_info(
+    pub async fn get_token_and_user_info(
         &self,
-        coin_id: &str,
+        token_id: &str,
         user_id: &str,
-    ) -> Result<CoinAndUserInfo> {
+    ) -> Result<TokenAndUserInfo> {
         sqlx::query_as!(
-            CoinAndUserInfo,
+            TokenAndUserInfo,
             r#"
             SELECT 
-                c.id as coin_id,
-                c.symbol as coin_symbol,
-                c.image_uri as coin_image_uri,
+                t.id as token_id,
+                t.symbol as token_symbol,
+                t.image_uri as token_image_uri,
                 a.nickname as user_nickname,
                 a.image_uri as user_image_uri
-            FROM coin c
+            FROM token t
             JOIN account a ON a.id = $2
-            WHERE c.id = $1
+            WHERE t.id = $1
             "#,
-            coin_id,
+            token_id,
             user_id
         )
         .fetch_one(&self.db.pool)
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to fetch coin and user info: {}", e))
+        .map_err(|e| anyhow::anyhow!("Failed to fetch token and user info: {}", e))
     }
 }

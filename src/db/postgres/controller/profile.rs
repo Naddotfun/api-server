@@ -6,8 +6,8 @@ use std::sync::Arc;
 use crate::{
     db::postgres::PostgresDatabase,
     types::{
-        model::{Account, Coin, Curve, Thread},
-        profile::{HoldCoin, Identifier},
+        model::{Account, Curve, Thread, Token},
+        profile::{HoldToken, Identifier},
     },
 };
 
@@ -15,8 +15,8 @@ pub struct ProfileController {
     pub db: Arc<PostgresDatabase>,
 }
 #[derive(FromRow)]
-struct CoinHoldingRow {
-    // Coin fields
+struct TokenHoldingRow {
+    // Token fields
     id: String,
     name: String,
     symbol: String,
@@ -33,11 +33,12 @@ struct CoinHoldingRow {
     // Additional fields
     balance: BigDecimal,
     price: Option<BigDecimal>,
+    pair: Option<String>,
 }
 
 #[derive(FromRow)]
-struct CoinHoldingRecord {
-    coin: Coin,
+struct TokenHoldingRecord {
+    token: Token,
     balance: BigDecimal,
     price: BigDecimal,
 }
@@ -67,24 +68,24 @@ impl ProfileController {
         Ok(account)
     }
 
-    pub async fn get_holding_coin(&self, identifier: &Identifier) -> Result<Vec<HoldCoin>> {
+    pub async fn get_holding_token(&self, identifier: &Identifier) -> Result<Vec<HoldToken>> {
         let holdings = match identifier {
             Identifier::Nickname(nickname) => {
                 sqlx::query_as!(
-                    CoinHoldingRow,
+                    TokenHoldingRow,
                     r#"
                     SELECT 
-                       c.*,
+                       t.*,
                         b.amount AS balance,
                         COALESCE(cu.price, 0) AS price
                     FROM 
                         balance b
                     JOIN 
-                        account a ON b.account = a.id
+                        account a ON b.account_id = a.id
                     JOIN 
-                        coin c ON b.coin_id = c.id
+                        token t ON b.token_id = t.id
                     LEFT JOIN 
-                        curve cu ON c.id = cu.coin_id
+                        curve cu ON t.id = cu.token_id
                     WHERE 
                         a.nickname = $1
                     "#,
@@ -95,20 +96,20 @@ impl ProfileController {
             }
             Identifier::Address(address) => {
                 sqlx::query_as!(
-                    CoinHoldingRow,
+                    TokenHoldingRow,
                     r#"
                     SELECT 
-                       c.*,
+                       t.*,
                         b.amount AS balance,
                         COALESCE(cu.price, 0) AS price
                     FROM 
                         balance b
                     JOIN 
-                        coin c ON b.coin_id = c.id
+                        token t ON b.token_id = t.id
                     LEFT JOIN 
-                        curve cu ON c.id = cu.coin_id
+                        curve cu ON t.id = cu.token_id
                     WHERE 
-                        b.account = $1
+                        b.account_id = $1
                     "#,
                     address
                 )
@@ -117,10 +118,10 @@ impl ProfileController {
             }
         };
 
-        let mut results: Vec<CoinHoldingRecord> = holdings
+        let mut results: Vec<TokenHoldingRecord> = holdings
             .into_iter()
             .map(|row| {
-                let coin = Coin {
+                let token = Token {
                     id: row.id,
                     name: row.name,
                     symbol: row.symbol,
@@ -134,10 +135,11 @@ impl ProfileController {
                     is_listing: row.is_listing,
                     create_transaction_hash: row.create_transaction_hash,
                     is_updated: row.is_updated,
+                    pair: row.pair,
                 };
 
-                CoinHoldingRecord {
-                    coin,
+                TokenHoldingRecord {
+                    token,
                     balance: row.balance,
                     price: row.price.unwrap_or(BigDecimal::zero()),
                 }
@@ -152,10 +154,10 @@ impl ProfileController {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        let results: Vec<HoldCoin> = results
+        let results: Vec<HoldToken> = results
             .into_iter()
-            .map(|record| HoldCoin {
-                coin: record.coin,
+            .map(|record| HoldToken {
+                token: record.token,
                 balance: record.balance.to_string(),
                 price: record.price.to_string(),
             })
@@ -200,17 +202,17 @@ impl ProfileController {
         Ok(replies)
     }
 
-    pub async fn get_created_coins(&self, identifier: &Identifier) -> Result<Vec<Coin>> {
-        let coins = match identifier {
+    pub async fn get_created_tokens(&self, identifier: &Identifier) -> Result<Vec<Token>> {
+        let tokens = match identifier {
             Identifier::Nickname(nickname) => {
                 sqlx::query_as!(
-                    Coin,
+                    Token,
                     r#"
-                    SELECT c.*
-                    FROM coin c
-                    JOIN account a ON c.creator = a.id
+                    SELECT t.*
+                    FROM token t
+                    JOIN account a ON t.creator = a.id
                     WHERE a.nickname = $1
-                    ORDER BY c.created_at DESC
+                    ORDER BY t.created_at DESC
                     "#,
                     nickname
                 )
@@ -219,10 +221,10 @@ impl ProfileController {
             }
             Identifier::Address(address) => {
                 sqlx::query_as!(
-                    Coin,
+                    Token,
                     r#"
                     SELECT *
-                    FROM coin
+                    FROM token
                     WHERE creator = $1
                     ORDER BY created_at DESC
                     "#,
@@ -233,7 +235,7 @@ impl ProfileController {
             }
         };
 
-        Ok(coins)
+        Ok(tokens)
     }
 
     pub async fn get_followers(&self, identifier: &Identifier) -> Result<Vec<Account>> {

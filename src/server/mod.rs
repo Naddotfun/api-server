@@ -23,7 +23,7 @@ use routes::{
     profile::{
         self,
         handler::{
-            CreatedCoinsResponse, FollowersResponse, FollowingResponse, HeldCoinsResponse,
+            CreatedTokensResponse, FollowersResponse, FollowingResponse, HeldTokensResponse,
             ProfileResponse, RepliesResponse,
         },
     },
@@ -39,11 +39,11 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
     db::{postgres::PostgresDatabase, redis::RedisDatabase},
-    event::{coin::CoinEventProducer, new_content::NewContentEventProducer, order::OrderEventProducer},
+    event::{new_content::NewContentEventProducer, order::OrderEventProducer, token::TokenEventProducer},
     types::{
-        event::order::OrderTokenResponse,
-        model::{Account, Coin, Thread},
-        profile::HoldCoin,
+        event::{order::OrderTokenResponse, UserInfo},
+        model::{Account, Thread, Token},
+        profile::HoldToken,
     },
 };
 
@@ -52,26 +52,27 @@ use crate::{
     paths(
         search::handler::search_token,
         profile::handler::get_profile,
-        profile::handler::get_coins_held,
+        profile::handler::get_tokens_held,
         profile::handler::get_replies,
-        profile::handler::get_created_coins,
+        profile::handler::get_created_tokens,
         profile::handler::get_followers,
         profile::handler::get_following,
     ),
     components(
         schemas(
             ProfileResponse,
-            HeldCoinsResponse,
+            HeldTokensResponse,
             RepliesResponse,
-            CreatedCoinsResponse,
+            CreatedTokensResponse,
             FollowersResponse,
             FollowingResponse,
             Account,
-            Coin,
-            HoldCoin,
+            Token,
+            HoldToken,
             Thread,
             SearchResponse,
             OrderTokenResponse,
+            UserInfo
             
         )
     ),
@@ -87,7 +88,7 @@ pub async fn main(
     postgres: Arc<PostgresDatabase>,
     redis: Arc<RedisDatabase>,
     order_event_producer: Arc<OrderEventProducer>,
-    coin_event_producer: Arc<CoinEventProducer>,
+    token_event_producer: Arc<TokenEventProducer>,
     new_content_producer:Arc<NewContentEventProducer>
 ) -> Result<()> {
     let ip = std::env::var("IP").unwrap();
@@ -96,7 +97,7 @@ pub async fn main(
         postgres,
         redis,
         order_event_producer,
-        coin_event_producer,
+        token_event_producer,
         new_content_producer
     };
     let app = Router::new()

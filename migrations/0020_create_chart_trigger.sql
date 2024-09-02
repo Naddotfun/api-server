@@ -9,7 +9,7 @@ BEGIN
     
     PERFORM pg_notify('new_chart', json_build_object(
         'chart_type', chart_type,
-        'coin_id', NEW.coin_id,
+        'token_id', NEW.token_id,
         'record', row_to_json(NEW)
     )::text);
     

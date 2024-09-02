@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::{
-    constant::change_channels::{COIN, COIN_REPLIES_COUNT, CURVE, SWAP},
+    constant::change_channels::{CURVE, SWAP, THREAD, TOKEN, TOKEN_REPLIES_COUNT},
     db::{
         postgres::{
             controller::{info::InfoController, order::OrderController},
@@ -23,8 +23,8 @@ use crate::{
             NewSwapMessage, NewTokenMessage, SendMessageType,
         },
         model::{
-            Coin, CoinReplyCount, CoinReplyCountWrapper, CoinWrapper, Curve, CurveWrapper,
-            FromValue, Swap, SwapWrapper,
+            Curve, CurveWrapper, FromValue, Swap, SwapWrapper, Token, TokenReplyCount,
+            TokenReplyCountWrapper, TokenWrapper,
         },
     },
 };
@@ -128,39 +128,54 @@ impl OrderEventProducer {
         controller: &OrderController,
         order_type: OrderType,
     ) -> Result<()> {
-        let coins = match order_type {
-            OrderType::CreationTime => controller.get_creation_time_order_token().await?,
-            OrderType::MarketCap => controller.get_market_cap_order_token().await?,
-            OrderType::Bump => controller.get_bump_order_token().await?,
-            OrderType::ReplyCount => controller.get_reply_count_order_token().await?,
-            OrderType::LatestReply => controller.get_latest_reply_order_token().await?,
+        let tokens_result = match order_type {
+            OrderType::CreationTime => controller.get_creation_time_order_token().await,
+            OrderType::MarketCap => controller.get_market_cap_order_token().await,
+            OrderType::Bump => controller.get_bump_order_token().await,
+            OrderType::ReplyCount => controller.get_reply_count_order_token().await,
+            OrderType::LatestReply => controller.get_latest_reply_order_token().await,
         };
-        // info!("Fetched coins for {:?}", coins);
-        match order_type {
-            OrderType::CreationTime => self.redis.set_creation_time_order(coins).await?,
-            OrderType::MarketCap => self.redis.set_market_cap_order(coins).await?,
-            OrderType::Bump => self.redis.set_bump_order(coins).await?,
-            OrderType::ReplyCount => self.redis.set_reply_count_order(coins).await?,
-            OrderType::LatestReply => self.redis.set_last_reply_order(coins).await?,
+
+        // 에러 처리
+        let tokens = tokens_result.map_err(|e| {
+            error!("Failed to get {:?} order tokens: {:?}", order_type, e);
+            anyhow::anyhow!("Failed to get {:?} order tokens", order_type)
+        })?;
+
+        // 빈 벡터 체크
+        if tokens.is_empty() {
+            info!("No tokens found for {:?} order", order_type);
+            return Ok(());
         }
 
-        // info!("Set event for {:?}", order_type);
+        let redis_result = match order_type {
+            OrderType::CreationTime => self.redis.set_creation_time_order(tokens).await,
+            OrderType::MarketCap => self.redis.set_market_cap_order(tokens).await,
+            OrderType::Bump => self.redis.set_bump_order(tokens).await,
+            OrderType::ReplyCount => self.redis.set_reply_count_order(tokens).await,
+            OrderType::LatestReply => self.redis.set_last_reply_order(tokens).await,
+        };
+
+        // Redis 설정 에러 처리
+        redis_result.map_err(|e| {
+            error!("Failed to set {:?} order in Redis: {:?}", order_type, e);
+            anyhow::anyhow!("Failed to set {:?} order in Redis", order_type)
+        })?;
+
+        info!("Successfully set {:?} order in Redis", order_type);
         Ok(())
     }
     #[instrument(skip(self))]
     pub async fn change_data_capture(&self) -> Result<()> {
         let mut listener = PgListener::connect_with(&self.db.pool).await?;
         listener
-            .listen_all(vec![COIN, SWAP, CURVE, COIN_REPLIES_COUNT])
+            .listen_all(vec![TOKEN, SWAP, CURVE, TOKEN_REPLIES_COUNT])
             .await?;
         let mut stream = listener.into_stream();
         info!("Order event capture Start");
 
         while let Some(notification) = stream.next().await {
             if let Ok(notification) = notification {
-                if self.total_channels.load(Ordering::Relaxed) == 0 {
-                    continue;
-                }
                 let producer = self.clone();
                 tokio::spawn(async move {
                     if let Err(e) = producer.process_notification(notification).await {
@@ -177,7 +192,7 @@ impl OrderEventProducer {
     async fn process_notification(&self, notification: PgNotification) -> Result<()> {
         let payload: Value = serde_json::from_str(&notification.payload())?;
         let event = self.parse_event(notification.channel(), payload)?;
-
+        info!("process_notification Event: {:?}", event);
         let messages = self.handle_order_event(event).await?;
         self.broadcast_messages(messages).await?;
 
@@ -185,13 +200,15 @@ impl OrderEventProducer {
     }
 
     fn parse_event(&self, channel: &str, payload: Value) -> Result<OrderEventCapture> {
+        info!("parse_event channel = {:?}", channel);
         match channel {
-            COIN => Ok(OrderEventCapture::CreationTime(Coin::from_value(payload)?)),
+            TOKEN => Ok(OrderEventCapture::CreationTime(Token::from_value(payload)?)),
             SWAP => Ok(OrderEventCapture::BumpOrder(Swap::from_value(payload)?)),
             CURVE => Ok(OrderEventCapture::MartKetCap(Curve::from_value(payload)?)),
-            COIN_REPLIES_COUNT => Ok(OrderEventCapture::ReplyChange(CoinReplyCount::from_value(
+            TOKEN_REPLIES_COUNT => Ok(OrderEventCapture::ReplyChange(TokenReplyCount::from_value(
                 payload,
             )?)),
+
             _ => Err(anyhow::anyhow!("Unknown channel: {}", channel)),
         }
     }
@@ -199,20 +216,23 @@ impl OrderEventProducer {
     async fn broadcast_messages(&self, messages: Vec<OrderMessage>) -> Result<()> {
         let senders = self.order_senders.read().await;
         for message in messages {
-            match message.message_type {
-                SendMessageType::ALL => {
-                    for (_, sender) in senders.iter() {
-                        if let Err(e) = sender.0.send(message.clone()) {
-                            warn!("Failed to send message: {:?}", e);
-                        }
+            // 메시지의 order type 가져오기
+            let order_type = message.order_type;
+
+            match senders.get(&order_type) {
+                Some(sender) => {
+                    if let Err(e) = sender.0.send(message) {
+                        warn!(
+                            "OrderType {:?}에 대한 메시지 전송 실패: {:?}",
+                            order_type, e
+                        );
                     }
                 }
-                SendMessageType::Regular => {
-                    if let Some(sender) = senders.get(&message.order_type) {
-                        if let Err(e) = sender.0.send(message) {
-                            warn!("Failed to send message: {:?}", e);
-                        }
-                    }
+                None => {
+                    warn!(
+                        "OrderType {:?}에 대한 sender를 찾을 수 없습니다",
+                        order_type
+                    );
                 }
             }
         }
@@ -221,11 +241,11 @@ impl OrderEventProducer {
 
     async fn handle_order_event(&self, event: OrderEventCapture) -> Result<Vec<OrderMessage>> {
         match event {
-            OrderEventCapture::CreationTime(coin) => self.handle_creation_time_order(coin).await,
+            OrderEventCapture::CreationTime(token) => self.handle_creation_time_order(token).await,
             OrderEventCapture::BumpOrder(swap) => self.handle_bump_order(swap).await,
             OrderEventCapture::MartKetCap(curve) => self.handle_market_cap_order(curve).await,
-            OrderEventCapture::ReplyChange(coin_reply) => {
-                self.handle_reply_change_order(coin_reply).await
+            OrderEventCapture::ReplyChange(token_reply) => {
+                self.handle_reply_change_order(token_reply).await
             }
         }
     }
@@ -234,18 +254,19 @@ impl OrderEventProducer {
     async fn add_creation_time_order(
         &self,
         db: Arc<PostgresDatabase>,
-        coin: Coin,
+        token: Token,
     ) -> Result<Option<OrderTokenResponse>> {
+        info!("Add_creation_time_order start");
         let order_controller = OrderController::new(db);
         let order_repsonse = order_controller
-            .get_order_token_response_by_coin_id(&coin.id)
+            .get_order_token_response_by_token(&token.id)
             .await?;
         let result = self
             .redis
-            .add_to_creation_time_order(&order_repsonse, coin.created_at.to_string())
+            .add_to_creation_time_order(&order_repsonse, token.created_at.to_string())
             .await
             .context("Add_to_creation_time_order fail")?;
-
+        info!("Add_to_creation_time_order success");
         Ok(if result { Some(order_repsonse) } else { None })
     }
 
@@ -256,7 +277,7 @@ impl OrderEventProducer {
     ) -> Result<Option<OrderTokenResponse>> {
         let order_controller = OrderController::new(db);
         let order_repsonse = order_controller
-            .get_order_token_response_by_coin_id(&swap.coin_id)
+            .get_order_token_response_by_token(&swap.token_id)
             .await?;
         let result = self
             .redis
@@ -271,10 +292,10 @@ impl OrderEventProducer {
         db: Arc<PostgresDatabase>,
         curve: Curve,
     ) -> Result<Option<OrderTokenResponse>> {
-        // let coin = coin_controller.get_coin_by_id(&curve.coin_id).await?;
+        // let token = token_controller.get_token_by_id(&curve.token_id).await?;
         let order_controller = OrderController::new(db);
         let order_repsonse = order_controller
-            .get_order_token_response_by_coin_id(&curve.coin_id)
+            .get_order_token_response_by_token(&curve.token_id)
             .await?;
         let score = curve.price.to_string();
         let result = self
@@ -284,108 +305,74 @@ impl OrderEventProducer {
         Ok(if result { Some(order_repsonse) } else { None })
     }
 
-    async fn add_coin_last_reply_order(
+    async fn add_token_last_reply_order(
         &self,
         db: Arc<PostgresDatabase>,
-        coin_reply: CoinReplyCount,
+        token_reply: TokenReplyCount,
     ) -> Result<Option<OrderTokenResponse>> {
         let order_controller = OrderController::new(db);
         let order_repsonse = order_controller
-            .get_order_token_response_by_coin_id(&coin_reply.coin_id)
+            .get_order_token_response_by_token(&token_reply.token_id)
             .await?;
-        let score = Utc::now().timestamp();
-        let result = self
+        let score = order_repsonse.created_at.to_string();
+        let redis_result = self
             .redis
             .add_to_last_reply_order(&order_repsonse, score.to_string())
             .await?;
-        Ok(if result { Some(order_repsonse) } else { None })
+        Ok(if redis_result {
+            Some(order_repsonse)
+        } else {
+            None
+        })
     }
-    async fn add_coin_reply_count_order(
+    async fn add_token_reply_count_order(
         &self,
         db: Arc<PostgresDatabase>,
-        coin_reply: CoinReplyCount,
+        token_reply: TokenReplyCount,
     ) -> Result<Option<OrderTokenResponse>> {
         let order_controller = OrderController::new(db);
-        let coin = order_controller
-            .get_order_token_response_by_coin_id(&coin_reply.coin_id)
+        let token = order_controller
+            .get_order_token_response_by_token(&token_reply.token_id)
             .await?;
         let result = self
             .redis
-            .add_to_reply_count_order(&coin, coin_reply.reply_count.to_string())
+            .add_to_reply_count_order(&token, token_reply.reply_count.to_string())
             .await?;
-        Ok(if result { Some(coin) } else { None })
+        Ok(if result { Some(token) } else { None })
     }
 
-    async fn handle_creation_time_order(&self, coin: Coin) -> Result<Vec<OrderMessage>> {
+    async fn handle_creation_time_order(&self, token: Token) -> Result<Vec<OrderMessage>> {
+        info!("Handle_creation_time_order start");
         let order_token_response = self
-            .add_creation_time_order(self.db.clone(), coin)
+            .add_creation_time_order(self.db.clone(), token)
             .await
             .context("Fail add_bump_order")?
             .ok_or_else(|| {
                 anyhow::anyhow!(
-                    "Failed to add coin, which should never happen for creation_time order"
+                    "Failed to add token, which should never happen for creation_time order"
                 )
             })?;
 
-        let new_token = NewTokenMessage::new(&order_token_response);
-
-        self.redis
-            .set_new_token(&new_token)
-            .await
-            .context("Failed Set New Token")?;
-
         let message = OrderMessage {
-            message_type: SendMessageType::ALL,
-            new_token: Some(new_token),
-            new_buy: None,
-            new_sell: None,
             order_type: OrderType::CreationTime,
             order_token: Some(vec![order_token_response]),
         };
+        info!("Handle_creation_time_order success");
         Ok(vec![message])
     }
 
     async fn handle_bump_order(&self, swap: Swap) -> Result<Vec<OrderMessage>> {
-        //timestamp 때문에 그렇나?
         let order_token_response = self
             .add_bump_order(self.db.clone(), swap.clone())
             .await
             .context("Fail add_bump_order")?
             .ok_or_else(|| {
-                anyhow::anyhow!("Failed to add coin, which should never happen for bump order")
+                anyhow::anyhow!("Failed to add token, which should never happen for bump order")
             })?;
 
-        let info_controller = InfoController::new(self.db.clone());
-        let trader_info = info_controller.get_user(&swap.sender).await?;
-
-        let new_swap_message = NewSwapMessage::new(&order_token_response, trader_info, &swap);
-        self.redis
-            .set_new_swap(&new_swap_message)
-            .await
-            .context("Failed Set New Swap")?;
-        let message = match new_swap_message.is_buy {
-            true => {
-                let message = OrderMessage {
-                    message_type: SendMessageType::ALL,
-                    new_token: None,
-                    new_buy: Some(new_swap_message),
-                    new_sell: None,
-                    order_type: OrderType::Bump,
-                    order_token: Some(vec![order_token_response.clone()]),
-                };
-                message
-            }
-            false => {
-                let message = OrderMessage {
-                    message_type: SendMessageType::ALL,
-                    new_token: None,
-                    new_buy: None,
-                    new_sell: Some(new_swap_message),
-                    order_type: OrderType::Bump,
-                    order_token: Some(vec![order_token_response.clone()]),
-                };
-                message
-            }
+        let message = OrderMessage {
+            order_type: OrderType::Bump,
+            order_token: Some(vec![order_token_response.clone()]),
         };
 
         Ok(vec![message])
@@ -396,15 +383,11 @@ impl OrderEventProducer {
             .add_market_cap_order(self.db.clone(), curve.clone())
             .await?
         {
-            Some(coin) => {
+            Some(token) => {
                 info!("Market cap order added successfully");
                 let message = OrderMessage {
-                    message_type: SendMessageType::Regular,
-                    new_token: None,
-                    new_buy: None,
-                    new_sell: None,
                     order_type: OrderType::MarketCap,
-                    order_token: Some(vec![coin]),
+                    order_token: Some(vec![token]),
                 };
                 Ok(vec![message])
             }
@@ -414,36 +397,36 @@ impl OrderEventProducer {
 
     async fn handle_reply_change_order(
         &self,
-        coin_reply: CoinReplyCount,
+        token_reply: TokenReplyCount,
     ) -> Result<Vec<OrderMessage>> {
-        let last_reply_result = self
-            .add_coin_last_reply_order(self.db.clone(), coin_reply.clone())
+        info!("Handle_reply_change_order start");
+        let lastest_reply_result = self
+            .add_token_last_reply_order(self.db.clone(), token_reply.clone())
             .await?;
         let reply_count_result = self
-            .add_coin_reply_count_order(self.db.clone(), coin_reply.clone())
+            .add_token_reply_count_order(self.db.clone(), token_reply.clone())
             .await?;
-
         let mut messages = Vec::new();
 
-        if let Some(last_reply_coin) = last_reply_result {
+        if let Some(last_reply_token) = lastest_reply_result {
             messages.push(OrderMessage {
-                message_type: SendMessageType::Regular,
-                new_token: None,
-                new_buy: None,
-                new_sell: None,
+                // message_type: SendMessageType::Regular,
+                // new_token: None,
+                // new_buy: None,
+                // new_sell: None,
                 order_type: OrderType::LatestReply,
-                order_token: Some(vec![last_reply_coin]),
+                order_token: Some(vec![last_reply_token]),
             });
         }
 
-        if let Some(reply_count_coin) = reply_count_result {
+        if let Some(reply_count_token) = reply_count_result {
             messages.push(OrderMessage {
-                message_type: SendMessageType::Regular,
-                new_token: None,
-                new_buy: None,
-                new_sell: None,
+                // message_type: SendMessageType::Regular,
+                // new_token: None,
+                // new_buy: None,
+                // new_sell: None,
                 order_type: OrderType::ReplyCount,
-                order_token: Some(vec![reply_count_coin]),
+                order_token: Some(vec![reply_count_token]),
             });
         }
 
@@ -459,7 +442,11 @@ impl OrderEventProducer {
         });
 
         *count += 1;
-        info!("Increment order receiver count ={:?}", *count);
+        info!(
+            "Increment order receiver count ={:?} order_type = {:?}",
+            *count, order_type
+        );
+
         OrderReceiver {
             receiver: sender.subscribe(),
             order_type,

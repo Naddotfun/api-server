@@ -1,34 +1,34 @@
 use crate::types::model::{Balance, BalanceWrapper, Chart, ChartWrapper, Thread, ThreadWrapper};
 use crate::{
     db::postgres::PostgresDatabase,
-    types::{chart_type::ChartType, event::coin::CoinResponse},
+    types::{chart_type::ChartType, event::token::TokenResponse},
 };
 use anyhow::{Context, Result};
 use serde_json::Value;
 use std::sync::Arc;
 
 #[derive(sqlx::FromRow)]
-struct CoinResponseRaw {
+struct TokenResponseRaw {
     swap: Option<Value>,
     chart: Option<Value>,
     balance: Option<Value>,
     curve: Option<Value>,
     thread: Option<Value>,
 }
-pub struct CoinPageController {
+pub struct TokenPageController {
     pub db: Arc<PostgresDatabase>,
 }
 
-impl CoinPageController {
+impl TokenPageController {
     pub fn new(db: Arc<PostgresDatabase>) -> Self {
-        CoinPageController { db }
+        TokenPageController { db }
     }
 
-    pub async fn get_coin_message(
+    pub async fn get_token_message(
         &self,
-        coin_id: &str,
+        token_id: &str,
         chart_type: ChartType,
-    ) -> Result<CoinResponse> {
+    ) -> Result<TokenResponse> {
         let chart_table = match chart_type {
             ChartType::OneMinute => "chart_1m",
             ChartType::FiveMinutes => "chart_5m",
@@ -42,20 +42,20 @@ impl CoinPageController {
         let query = format!(
             r#"
             SELECT 
-                (SELECT json_agg(row_to_json(s)) FROM swap s WHERE s.coin_id = $1) as swap,
-                (SELECT json_agg(row_to_json(ch)) FROM {} ch WHERE ch.coin_id = $1) as chart,
-                (SELECT json_agg(row_to_json(b)) FROM balance b WHERE b.coin_id = $1) as balance,
-                (SELECT row_to_json(cu) FROM curve cu WHERE cu.coin_id = $1 LIMIT 1) as curve,
-                (SELECT json_agg(row_to_json(t)) FROM thread t WHERE t.coin_id = $1) as thread
+                (SELECT json_agg(row_to_json(s)) FROM swap s WHERE s.token_id = $1) as swap,
+                (SELECT json_agg(row_to_json(ch)) FROM {} ch WHERE ch.token_id = $1) as chart,
+                (SELECT json_agg(row_to_json(b)) FROM balance b WHERE b.token_id = $1) as balance,
+                (SELECT row_to_json(cu) FROM curve cu WHERE cu.token_id = $1 LIMIT 1) as curve,
+                (SELECT json_agg(row_to_json(t)) FROM thread t WHERE t.token_id = $1) as thread
             "#,
             chart_table
         );
 
-        let raw = sqlx::query_as::<_, CoinResponseRaw>(&query)
-            .bind(coin_id)
+        let raw = sqlx::query_as::<_, TokenResponseRaw>(&query)
+            .bind(token_id)
             .fetch_one(&self.db.pool)
             .await
-            .context("Failed to fetch coin data")?;
+            .context("Failed to fetch token data")?;
         // info!("Raw chart is :{:?}", raw.chart);
         let chart = raw
             .chart
@@ -66,7 +66,7 @@ impl CoinPageController {
                     .map(|chart| ChartWrapper {
                         record: chart,
                         chart_type: chart_type.to_string(),
-                        coin_id: coin_id.to_string(),
+                        token_id: token_id.to_string(),
                     })
                     .collect::<Vec<ChartWrapper>>()
             });
@@ -79,8 +79,8 @@ impl CoinPageController {
                     .into_iter()
                     .map(|balance| BalanceWrapper {
                         operation: "select".to_string(),
-                        balance: balance,
-                        coin_id: coin_id.to_string(),
+                        balance,
+                        token_id: token_id.to_string(),
                     })
                     .collect::<Vec<BalanceWrapper>>()
             });
@@ -94,13 +94,13 @@ impl CoinPageController {
                     .map(|thread| ThreadWrapper {
                         operation: "select".to_string(),
                         record: thread,
-                        coin_id: coin_id.to_string(),
+                        token_id: token_id.to_string(),
                     })
                     .collect::<Vec<ThreadWrapper>>()
             });
 
-        Ok(CoinResponse {
-            id: coin_id.to_string(),
+        Ok(TokenResponse {
+            id: token_id.to_string(),
             swap: raw.swap.and_then(|v| serde_json::from_value(v).ok()),
             chart,
             balance,

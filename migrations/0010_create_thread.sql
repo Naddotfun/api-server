@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS thread(
     id SERIAL PRIMARY KEY,
-    coin_id VARCHAR(42) NOT NULL REFERENCES coin(id),
+    token_id VARCHAR(42) NOT NULL REFERENCES token(id),
     author_id VARCHAR(42) NOT NULL REFERENCES account(id),
     content TEXT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS thread(
     CONSTRAINT valid_parent CHECK (id != root_id)
 );
 
-CREATE INDEX idx_thread_coin_id ON thread(coin_id);
+CREATE INDEX idx_thread_token_id ON thread(token_id);
 CREATE INDEX idx_thread_author_id ON thread(author_id);
 CREATE INDEX idx_thread_root_id ON thread(root_id);
 CREATE INDEX idx_thread_created_at ON thread(created_at);

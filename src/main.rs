@@ -5,9 +5,9 @@ use anyhow::Result;
 use api_server::{
     db::{postgres::PostgresDatabase, redis::RedisDatabase},
     event::{
-        coin::{self, CoinEventProducer},
         new_content::{self, NewContentEventProducer},
         order::{self, OrderEventProducer},
+        token::{self, TokenEventProducer},
     },
     server,
 };
@@ -23,11 +23,14 @@ async fn main() -> Result<()> {
     let postgres = Arc::new(PostgresDatabase::new().await);
     let redis = Arc::new(RedisDatabase::new().await);
 
-    let coin_event_producer = Arc::new(CoinEventProducer::new(postgres.clone()));
+    let coin_event_producer = Arc::new(TokenEventProducer::new(postgres.clone()));
     let order_event_porducer = Arc::new(OrderEventProducer::new(redis.clone(), postgres.clone()));
-    let new_content_producer = Arc::new(NewContentEventProducer::new(postgres.clone()));
+    let new_content_producer = Arc::new(NewContentEventProducer::new(
+        postgres.clone(),
+        redis.clone(),
+    ));
     set.spawn(order::main(order_event_porducer.clone()));
-    set.spawn(coin::main(coin_event_producer.clone()));
+    set.spawn(token::main(coin_event_producer.clone()));
     set.spawn(new_content::main(
         new_content_producer.clone(),
         redis.clone(),

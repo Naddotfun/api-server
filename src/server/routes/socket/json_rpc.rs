@@ -27,7 +27,7 @@ fn default_jsonrpc() -> String {
 #[serde(rename_all = "snake_case")]
 pub enum JsonRpcMethod {
     OrderSubscribe,
-    CoinSubscribe,
+    TokenSubscribe,
     NewContentSubscribe,
     // 다른 메서드들을 여기에 추가할 수 있습니다.
 }

@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use crate::{
     db::postgres::PostgresDatabase,
-    types::event::{CoinAndUserInfo, CoinInfo, NewSwapMessage, NewTokenMessage, UserInfo},
+    types::event::{NewSwapMessage, NewTokenMessage, TokenInfo, UserInfo},
 };
 
 pub struct InitContentController {
@@ -25,11 +25,12 @@ impl InitContentController {
                 s.nad_amount,
                 a.nickname as user_nickname,
                 a.image_uri as user_image_uri,
-                c.symbol as coin_symbol,
-                c.image_uri as coin_image_uri
+                t.symbol as token_symbol,
+                t.image_uri as token_image_uri,
+                t.id as token_id
             FROM swap s
             JOIN account a ON s.sender = a.id
-            JOIN coin c ON s.coin_id = c.id
+            JOIN token t ON s.token_id = t.id
             WHERE s.is_buy = true
             ORDER BY s.created_at DESC
             LIMIT 1
@@ -37,15 +38,16 @@ impl InitContentController {
         )
         .fetch_optional(&self.db.pool)
         .await?;
-
+        
         Ok(result.map(|row| NewSwapMessage {
             user_info: UserInfo {
                 nickname: row.user_nickname,
                 image_uri: row.user_image_uri,
             },
-            coin_info: CoinInfo {
-                symbol: row.coin_symbol,
-                image_uri: row.coin_image_uri,
+            token_info: TokenInfo {
+                id: row.token_id,
+                symbol: row.token_symbol,
+                image_uri: row.token_image_uri,
             },
             is_buy: row.is_buy,
             nad_amount: row.nad_amount.to_string(),
@@ -60,11 +62,12 @@ impl InitContentController {
                 s.nad_amount,
                 a.nickname as user_nickname,
                 a.image_uri as user_image_uri,
-                c.symbol as coin_symbol,
-                c.image_uri as coin_image_uri
+                t.symbol as token_symbol,
+                t.image_uri as token_image_uri,
+                t.id as token_id
             FROM swap s
             JOIN account a ON s.sender = a.id
-            JOIN coin c ON s.coin_id = c.id
+            JOIN token t ON s.token_id = t.id
             WHERE s.is_buy = false
             ORDER BY s.created_at DESC
             LIMIT 1
@@ -78,9 +81,10 @@ impl InitContentController {
                 nickname: row.user_nickname,
                 image_uri: row.user_image_uri,
             },
-            coin_info: CoinInfo {
-                symbol: row.coin_symbol,
-                image_uri: row.coin_image_uri,
+            token_info: TokenInfo {
+                id: row.token_id,
+                symbol: row.token_symbol,
+                image_uri: row.token_image_uri,
             },
             is_buy: row.is_buy,
             nad_amount: row.nad_amount.to_string(),
@@ -91,14 +95,15 @@ impl InitContentController {
         let result = sqlx::query!(
             r#"
             SELECT 
-                c.symbol,
-                c.image_uri as coin_image_uri,
-                c.created_at,
+                t.symbol,
+                t.image_uri as token_image_uri,
+                t.created_at,
+                t.id as token_id,
                 a.nickname as user_nickname,
                 a.image_uri as user_image_uri
-            FROM coin c
-            JOIN account a ON c.creator = a.id
-            ORDER BY c.created_at DESC
+            FROM token t
+            JOIN account a ON t.creator = a.id
+            ORDER BY t.created_at DESC
             LIMIT 1
             "#
         )
@@ -110,8 +115,9 @@ impl InitContentController {
                 nickname: row.user_nickname,
                 image_uri: row.user_image_uri,
             },
+            id: row.token_id,
             symbol: row.symbol,
-            image_uri: row.coin_image_uri,
+            image_uri: row.token_image_uri,
             created_at: row.created_at,
         }))
     }

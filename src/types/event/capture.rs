@@ -1,10 +1,10 @@
 use crate::types::model::{
-    BalanceWrapper, ChartWrapper, Coin, CoinReplyCount, Curve, Swap, ThreadWrapper,
+    BalanceWrapper, ChartWrapper, Curve, Swap, Thread, ThreadWrapper, Token, TokenReplyCount,
 };
 
 #[derive(Clone, Debug)]
-pub enum CoinEventCapture {
-    Coin(Coin),
+pub enum TokenEventCapture {
+    Token(Token),
     Swap(Swap),
     Chart(ChartWrapper),
     Balance(BalanceWrapper),
@@ -14,13 +14,14 @@ pub enum CoinEventCapture {
 #[derive(Clone, Debug)]
 pub enum NewContentCapture {
     NewSwap(Swap),
-    NewToken(Coin),
+    NewToken(Token),
 }
 
 #[derive(Debug, Clone)]
 pub enum OrderEventCapture {
-    CreationTime(Coin),
+    CreationTime(Token),
     BumpOrder(Swap),
-    ReplyChange(CoinReplyCount),
+    ReplyChange(TokenReplyCount),
     MartKetCap(Curve),
+    // ThreadChange(Thread),
 }

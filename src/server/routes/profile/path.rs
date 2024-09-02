@@ -1,9 +1,9 @@
 #[derive(Debug)]
 pub enum ProfilePath {
     Profile,
-    CoinHeld,
+    TokenHeld,
     Replies,
-    CoinCreated,
+    TokenCreated,
     Followers,
     Following,
 }
@@ -12,9 +12,9 @@ impl ProfilePath {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Profile => "/profile/:user",
-            Self::CoinHeld => "/profile/coins-held/:user",
+            Self::TokenHeld => "/profile/tokens-held/:user",
             Self::Replies => "/profile/replies/:user",
-            Self::CoinCreated => "/profile/coins-created/:user",
+            Self::TokenCreated => "/profile/tokens-created/:user",
             Self::Followers => "/profile/followers/:user",
             Self::Following => "/profile/following/:user",
         }
@@ -23,9 +23,9 @@ impl ProfilePath {
     pub fn docs_str(&self) -> &'static str {
         match self {
             Self::Profile => "/profile/{user}",
-            Self::CoinHeld => "/profile/coins-held/{user}",
+            Self::TokenHeld => "/profile/tokens-held/{user}",
             Self::Replies => "/profile/replies/{user}",
-            Self::CoinCreated => "/profile/coins-created/{user}",
+            Self::TokenCreated => "/profile/tokens-created/{user}",
             Self::Followers => "/profile/followers/{user}",
             Self::Following => "/profile/following/{user}",
         }

@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::{
-    constant::change_channels::{COIN, SWAP},
+    constant::change_channels::{SWAP, TOKEN},
     db::{
         postgres::{
             controller::{info::InfoController, new_content::InitContentController},
@@ -19,27 +19,18 @@ use crate::{
     types::{
         event::{
             capture::NewContentCapture, new_content::NewContentMessage, NewSwapMessage,
-            NewTokenMessage, SendMessageType,
+            NewTokenMessage,
         },
-        model::{
-            Coin, CoinReplyCount, CoinReplyCountWrapper, CoinWrapper, Curve, CurveWrapper,
-            FromValue, Swap, SwapWrapper,
-        },
+        model::{FromValue, Swap, Token},
     },
 };
-use anyhow::{anyhow, Context, Result};
-use chrono::Utc;
+use anyhow::{Context, Result};
+
 use futures::StreamExt;
 
 use serde_json::Value;
 use sqlx::postgres::{PgListener, PgNotification};
-use tokio::{
-    sync::{
-        broadcast::{self, Receiver, Sender},
-        RwLock,
-    },
-    time::sleep,
-};
+use tokio::sync::broadcast::{self, Receiver, Sender};
 use tracing::{debug, error, info, instrument, warn};
 
 #[instrument(skip(producer, redis))]
@@ -64,24 +55,24 @@ pub async fn main(producer: Arc<NewContentEventProducer>, redis: Arc<RedisDataba
             info!("No latest sell found");
         }
 
-        if let Some(latest_created_coin) = new_content_controller.get_latest_new_token().await? {
-            info!("Latest created coin: {:?}", latest_created_coin);
-            redis.set_new_token(&latest_created_coin).await?;
+        if let Some(latest_created_token) = new_content_controller.get_latest_new_token().await? {
+            info!("Latest created token: {:?}", latest_created_token);
+            redis.set_new_token(&latest_created_token).await?;
         } else {
-            info!("No latest created coin found");
+            info!("No latest created token found");
         }
     }
     loop {
         if let Err(e) = producer.change_data_capture().await {
-            error!("Error in coin change_data_capture: {:?}", e);
+            error!("Error in token change_data_capture: {:?}", e);
             info!("Retrying in 5 seconds...");
             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
         } else {
-            warn!("Coin event capture completed unexpectedly");
+            warn!("Token event capture completed unexpectedly");
             break;
         }
     }
-    error!("Coin event capture ended");
+    error!("Token event capture ended");
     Ok(())
 }
 pub struct NewContentReceiver {
@@ -105,15 +96,17 @@ impl Drop for NewContentReceiver {
 #[derive(Clone)]
 pub struct NewContentEventProducer {
     db: Arc<PostgresDatabase>,
+    redis: Arc<RedisDatabase>,
     content_sender: Arc<Sender<NewContentMessage>>,
     total_channels: Arc<AtomicUsize>,
 }
 
 impl NewContentEventProducer {
-    pub fn new(db: Arc<PostgresDatabase>) -> Self {
+    pub fn new(db: Arc<PostgresDatabase>, redis: Arc<RedisDatabase>) -> Self {
         let (sender, _) = broadcast::channel(100);
         Self {
             db,
+            redis,
             content_sender: Arc::new(sender),
             total_channels: Arc::new(AtomicUsize::new(0)),
         }
@@ -122,13 +115,10 @@ impl NewContentEventProducer {
     #[instrument(skip(self))]
     pub async fn change_data_capture(&self) -> Result<()> {
         let mut listener = PgListener::connect_with(&self.db.pool).await?;
-        listener.listen_all(vec![COIN, SWAP]).await?;
+        listener.listen_all(vec![TOKEN, SWAP]).await?;
         let mut stream = listener.into_stream();
         info!("New Content event capture started");
 
-        // while let Some(notification) = stream.next().await {
-        //     self.handle_notification(notification).await?;
-        // }
         while let Some(notification) = stream.next().await {
             let producer = self.clone();
             tokio::spawn(async move {
@@ -148,16 +138,11 @@ impl NewContentEventProducer {
     ) -> Result<()> {
         let notification = notification.context("Failed to get notification")?;
 
-        if self.total_channels.load(Ordering::Relaxed) == 0 {
-            debug!("New Content: No active channels");
-            return Ok(());
-        }
-
         let payload: Value = serde_json::from_str(&notification.payload())
             .context("Failed to parse notification payload")?;
 
         let event = match notification.channel() {
-            COIN => NewContentCapture::NewToken(Coin::from_value(payload)?),
+            TOKEN => NewContentCapture::NewToken(Token::from_value(payload)?),
             SWAP => NewContentCapture::NewSwap(Swap::from_value(payload)?),
             _ => return Ok(()),
         };
@@ -172,34 +157,44 @@ impl NewContentEventProducer {
     async fn handle_new_content(&self, content: NewContentCapture) -> Result<NewContentMessage> {
         let info_controller = InfoController::new(self.db.clone());
         match content {
-            NewContentCapture::NewToken(coin) => {
+            NewContentCapture::NewToken(token) => {
                 let info = info_controller
-                    .get_coin_and_user_info(&coin.id, &coin.creator)
+                    .get_token_and_user_info(&token.id, &token.creator)
                     .await?;
-                Ok(NewContentMessage::from_coin(coin, info))
+                let new_token = NewTokenMessage::new(&token, &info);
+                self.redis.set_new_token(&new_token).await?;
+                Ok(NewContentMessage::from_token(token, info))
             }
             NewContentCapture::NewSwap(swap) => {
                 let info = info_controller
-                    .get_coin_and_user_info(&swap.coin_id, &swap.sender)
+                    .get_token_and_user_info(&swap.token_id, &swap.sender)
                     .await?;
+                let new_swap = NewSwapMessage::new(&swap, &info);
+                self.redis.set_new_swap(&new_swap).await?;
                 Ok(NewContentMessage::from_swap(swap, info))
             }
         }
     }
 
     async fn send_content_message(&self, content_message: NewContentMessage) -> Result<()> {
-        match self.content_sender.send(content_message) {
-            Ok(receiver_count) => {
-                debug!("Sent content message to {} receivers", receiver_count);
-                Ok(())
+        let receiver_count = self.total_channels.load(Ordering::Relaxed);
+        info!("New Content Receiver count: {}", receiver_count);
+        if receiver_count > 0 {
+            match self.content_sender.send(content_message) {
+                Ok(_) => {
+                    debug!("Sent content message to {} receivers", receiver_count);
+                    Ok(())
+                }
+                Err(e) => {
+                    error!("Failed to send content message: {:?}", e);
+                    Err(anyhow::anyhow!("Failed to send content message"))
+                }
             }
-            Err(e) => {
-                warn!("Failed to send content message: {:?}", e);
-                Err(anyhow::anyhow!("Failed to send content message"))
-            }
+        } else {
+            debug!("No receivers to send content message to");
+            Ok(())
         }
     }
-
     pub async fn get_content_receiver(&self) -> NewContentReceiver {
         self.total_channels.fetch_add(1, Ordering::SeqCst);
         info!(

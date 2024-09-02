@@ -3,7 +3,7 @@ use crate::types::{
         order::{OrderTokenResponse, OrderType},
         NewSwapMessage, NewTokenMessage,
     },
-    model::Coin,
+    model::Token,
 };
 use anyhow::{Context, Result};
 use axum_extra::handler::Or;
@@ -14,7 +14,7 @@ use redis::{AsyncCommands, Client, Commands};
 use serde_json::{from_str, Value};
 use tracing::{error, info, warn};
 
-use super::postgres::controller::order::CoinWithScore;
+use super::postgres::controller::order::TokenWithScore;
 lazy_static! {
     static ref BUMP_ORDER_KEY: &'static str = "bump_order";
     static ref LAST_REPLY_ORDER_KEY: &'static str = "last_reply_order";
@@ -43,14 +43,14 @@ impl RedisDatabase {
         RedisDatabase { client }
     }
     // 범용 메서드: 정렬된 세트에서 코인 저장
-    async fn add_coin_to_queue(
+    async fn add_token_to_queue(
         &self,
         key: &str,
-        coin: &OrderTokenResponse,
+        token: &OrderTokenResponse,
         score: String,
     ) -> Result<bool> {
         let mut conn = self.client.get_multiplexed_async_connection().await?;
-        let coin_json = serde_json::to_string(coin).context("Failed to serialize coin")?;
+        let token_json = serde_json::to_string(token).context("Failed to serialize token")?;
 
         let score = score
             .parse::<f64>()
@@ -59,14 +59,14 @@ impl RedisDatabase {
         let mut pipe = redis::pipe();
         pipe.atomic();
 
-        // ZADD will update if the coin exists, or insert if it doesn't
-        pipe.zadd(key, &coin_json, score);
+        // ZADD will update if the token exists, or insert if it doesn't
+        pipe.zadd(key, &token_json, score);
 
         // Keep only the top 50 items (remove items from index 50 to the end)
         pipe.zremrangebyrank(key, 0, -51);
 
-        // Get the rank of the coin after the operation
-        pipe.zrevrank(key, &coin_json);
+        // Get the rank of the token after the operation
+        pipe.zrevrank(key, &token_json);
 
         let results: (i32, i32, Option<isize>) = pipe.query_async(&mut conn).await?;
 
@@ -75,9 +75,9 @@ impl RedisDatabase {
         let rank = results.2;
 
         if added_or_updated == 1 {
-            info!("Coin {} was newly added to the queue", coin.id);
+            info!("Token {} was newly added to the queue", token.id);
         } else {
-            info!("Coin {} was updated in the queue", coin.id);
+            info!("Token {} was updated in the queue", token.id);
         }
 
         if removed > 0 {
@@ -85,85 +85,85 @@ impl RedisDatabase {
         }
 
         if let Some(r) = rank {
-            info!("Coin {} is now at rank {}", coin.id, r);
+            info!("Token {} is now at rank {}", token.id, r);
             Ok(r < 50)
         } else {
-            info!("Coin {} was not added/updated in the top 50", coin.id);
+            info!("Token {} was not added/updated in the top 50", token.id);
             Ok(false)
         }
     }
     pub async fn add_to_bump_order(
         &self,
-        coin: &OrderTokenResponse,
+        token: &OrderTokenResponse,
         score: String,
     ) -> Result<bool> {
-        self.add_coin_to_queue(*BUMP_ORDER_KEY, coin, score).await
+        self.add_token_to_queue(*BUMP_ORDER_KEY, token, score).await
     }
 
     pub async fn add_to_last_reply_order(
         &self,
-        coin: &OrderTokenResponse,
+        token: &OrderTokenResponse,
         score: String,
     ) -> Result<bool> {
-        self.add_coin_to_queue(*LAST_REPLY_ORDER_KEY, coin, score)
+        self.add_token_to_queue(*LAST_REPLY_ORDER_KEY, token, score)
             .await
     }
 
     pub async fn add_to_reply_count_order(
         &self,
-        coin: &OrderTokenResponse,
+        token: &OrderTokenResponse,
         score: String,
     ) -> Result<bool> {
-        self.add_coin_to_queue(*REPLY_COUNT_ORDER_KEY, coin, score)
+        self.add_token_to_queue(*REPLY_COUNT_ORDER_KEY, token, score)
             .await
     }
 
     pub async fn add_to_market_cap_order(
         &self,
-        coin: &OrderTokenResponse,
+        token: &OrderTokenResponse,
         score: String,
     ) -> Result<bool> {
-        self.add_coin_to_queue(*MARKET_CAP_ORDER_KEY, coin, score)
+        self.add_token_to_queue(*MARKET_CAP_ORDER_KEY, token, score)
             .await
     }
 
     pub async fn add_to_creation_time_order(
         &self,
-        coin: &OrderTokenResponse,
+        token: &OrderTokenResponse,
         score: String,
     ) -> Result<bool> {
-        self.add_coin_to_queue(*CREATION_TIME_ORDER_KEY, coin, score)
+        self.add_token_to_queue(*CREATION_TIME_ORDER_KEY, token, score)
             .await
     }
 
-    async fn get_coins_from_queue(&self, key: &str) -> Result<Vec<OrderTokenResponse>> {
+    async fn get_tokens_from_queue(&self, key: &str) -> Result<Vec<OrderTokenResponse>> {
         let mut conn = self.client.get_multiplexed_async_connection().await?;
 
         // ZREVRANGE를 사용하여 모든 항목을 한 번에 가져옵니다 (최대 50개).
-        let coins_json: Vec<String> = conn.zrevrange(key, 0, -1).await?;
+        let tokens_json: Vec<String> = conn.zrevrange(key, 0, -1).await?;
 
         // 병렬로 JSON 파싱
-        let parsed_coins_futures = coins_json.into_iter().map(|json| {
+        let parsed_tokens_futures = tokens_json.into_iter().map(|json| {
             tokio::spawn(async move {
                 match from_str(&json) {
-                    Ok(coin) => Ok(coin),
+                    Ok(token) => Ok(token),
                     Err(e) => {
-                        error!("Failed to parse coin JSON: {}. Error: {}", json, e);
+                        error!("Failed to parse token JSON: {}. Error: {}", json, e);
                         Err(anyhow::anyhow!("JSON parsing error"))
                     }
                 }
             })
         });
 
-        let results = try_join_all(parsed_coins_futures).await?;
+        let results = try_join_all(parsed_tokens_futures).await?;
 
         // 성공적으로 파싱된 코인만 수집
-        let coins: Vec<OrderTokenResponse> = results
+        let tokens: Vec<OrderTokenResponse> = results
             .into_iter()
             .filter_map(|result| result.ok())
             .collect();
 
-        Ok(coins)
+        Ok(tokens)
     }
     pub async fn get_order(&self, order_type: OrderType) -> Result<Vec<OrderTokenResponse>> {
         use OrderType::*;
@@ -177,49 +177,49 @@ impl RedisDatabase {
     }
     // 각 순서별로 모든 코인 가져오기
     pub async fn get_bump_order(&self) -> Result<Vec<OrderTokenResponse>> {
-        self.get_coins_from_queue(*BUMP_ORDER_KEY).await
+        self.get_tokens_from_queue(*BUMP_ORDER_KEY).await
     }
 
     pub async fn get_last_reply_order(&self) -> Result<Vec<OrderTokenResponse>> {
-        self.get_coins_from_queue(*LAST_REPLY_ORDER_KEY).await
+        self.get_tokens_from_queue(*LAST_REPLY_ORDER_KEY).await
     }
 
     pub async fn get_reply_count_order(&self) -> Result<Vec<OrderTokenResponse>> {
-        self.get_coins_from_queue(*REPLY_COUNT_ORDER_KEY).await
+        self.get_tokens_from_queue(*REPLY_COUNT_ORDER_KEY).await
     }
 
     pub async fn get_market_cap_order(&self) -> Result<Vec<OrderTokenResponse>> {
-        self.get_coins_from_queue(*MARKET_CAP_ORDER_KEY).await
+        self.get_tokens_from_queue(*MARKET_CAP_ORDER_KEY).await
     }
 
     pub async fn get_creation_time_order(&self) -> Result<Vec<OrderTokenResponse>> {
-        self.get_coins_from_queue(*CREATION_TIME_ORDER_KEY).await
+        self.get_tokens_from_queue(*CREATION_TIME_ORDER_KEY).await
     }
 
     //Initialize
 
-    async fn set_coins_to_queue(&self, key: &str, coins: Vec<CoinWithScore>) -> Result<()> {
+    async fn set_tokens_to_queue(&self, key: &str, tokens: Vec<TokenWithScore>) -> Result<()> {
         let mut conn = self.client.get_multiplexed_async_connection().await?;
         let mut pipe = redis::pipe();
 
         // 기존 데이터 삭제
         pipe.del(key);
 
-        if coins.is_empty() {
+        if tokens.is_empty() {
             return Ok(());
         }
 
         // 코인 데이터를 JSON으로 직렬화하고 정렬된 집합에 추가
-        for coin_with_score in coins {
-            let coin_json =
-                serde_json::to_string(&coin_with_score.coin).context("Failed to serialize coin")?;
-            let score = coin_with_score
+        for token_with_score in tokens {
+            let token_json = serde_json::to_string(&token_with_score.token)
+                .context("Failed to serialize token")?;
+            let score = token_with_score
                 .score
                 .parse::<f64>()
                 .context("Failed to parse score as f64")?;
             // Use the negative of the score to reverse the order
 
-            pipe.zadd(key, coin_json, score);
+            pipe.zadd(key, token_json, score);
         }
         // 파이프라인 실행
         pipe.query_async(&mut conn)
@@ -230,34 +230,40 @@ impl RedisDatabase {
     }
     pub async fn set_creation_time_order(
         &self,
-        coins_with_score: Vec<CoinWithScore>,
+        tokens_with_score: Vec<TokenWithScore>,
     ) -> Result<()> {
-        self.set_coins_to_queue(*CREATION_TIME_ORDER_KEY, coins_with_score)
+        self.set_tokens_to_queue(*CREATION_TIME_ORDER_KEY, tokens_with_score)
             .await
     }
-    pub async fn set_bump_order(&self, coins_with_score: Vec<CoinWithScore>) -> Result<()> {
-        self.set_coins_to_queue(*BUMP_ORDER_KEY, coins_with_score)
-            .await
-    }
-
-    pub async fn set_last_reply_order(&self, coins_with_score: Vec<CoinWithScore>) -> Result<()> {
-        self.set_coins_to_queue(*LAST_REPLY_ORDER_KEY, coins_with_score)
+    pub async fn set_bump_order(&self, tokens_with_score: Vec<TokenWithScore>) -> Result<()> {
+        self.set_tokens_to_queue(*BUMP_ORDER_KEY, tokens_with_score)
             .await
     }
 
-    pub async fn set_reply_count_order(&self, coins_with_score: Vec<CoinWithScore>) -> Result<()> {
-        self.set_coins_to_queue(*REPLY_COUNT_ORDER_KEY, coins_with_score)
+    pub async fn set_last_reply_order(&self, tokens_with_score: Vec<TokenWithScore>) -> Result<()> {
+        self.set_tokens_to_queue(*LAST_REPLY_ORDER_KEY, tokens_with_score)
             .await
     }
 
-    pub async fn set_market_cap_order(&self, coins_with_score: Vec<CoinWithScore>) -> Result<()> {
-        self.set_coins_to_queue(*MARKET_CAP_ORDER_KEY, coins_with_score)
+    pub async fn set_reply_count_order(
+        &self,
+        tokens_with_score: Vec<TokenWithScore>,
+    ) -> Result<()> {
+        self.set_tokens_to_queue(*REPLY_COUNT_ORDER_KEY, tokens_with_score)
             .await
     }
 
-    pub async fn set_new_token(&self, new_coin: &NewTokenMessage) -> Result<(), redis::RedisError> {
+    pub async fn set_market_cap_order(&self, tokens_with_score: Vec<TokenWithScore>) -> Result<()> {
+        self.set_tokens_to_queue(*MARKET_CAP_ORDER_KEY, tokens_with_score)
+            .await
+    }
+
+    pub async fn set_new_token(
+        &self,
+        new_token: &NewTokenMessage,
+    ) -> Result<(), redis::RedisError> {
         let mut conn = self.client.get_multiplexed_async_connection().await?;
-        let value = serde_json::to_string(new_coin).map_err(|e| {
+        let value = serde_json::to_string(new_token).map_err(|e| {
             redis::RedisError::from((
                 redis::ErrorKind::IoError,
                 "Serialization error",

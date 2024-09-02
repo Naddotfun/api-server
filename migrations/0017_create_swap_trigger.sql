@@ -2,7 +2,7 @@ CREATE OR REPLACE FUNCTION notify_new_swap()
 RETURNS trigger AS $$
 BEGIN
     PERFORM pg_notify('new_swap', json_build_object(
-        'coin_id', NEW.coin_id,
+        'token_id', NEW.token_id,
         'record', row_to_json(NEW)
     )::text);
 

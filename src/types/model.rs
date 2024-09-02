@@ -37,7 +37,8 @@ where
 
 // Define structs
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
-pub struct Coin {
+
+pub struct Token {
     pub id: String,
     pub name: String,
     pub symbol: String,
@@ -48,16 +49,16 @@ pub struct Coin {
     pub website: Option<String>,
     pub image_uri: String,
     pub is_listing: bool,
+    pub pair: Option<String>,
     pub created_at: i64,
     pub create_transaction_hash: String,
     pub is_updated: bool,
 }
-
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Curve {
     #[serde(rename(serialize = "curve_id"))]
     pub id: String,
-    pub coin_id: String,
+    pub token_id: String,
     pub virtual_nad: BigDecimal,
     pub virtual_token: BigDecimal,
     pub reserve_token: BigDecimal,
@@ -71,7 +72,7 @@ pub struct Curve {
 pub struct Swap {
     #[serde(skip_serializing)]
     pub id: i32,
-    pub coin_id: String,
+    pub token_id: String,
     pub sender: String,
     pub is_buy: bool,
     pub nad_amount: BigDecimal,
@@ -85,7 +86,7 @@ pub struct Chart {
     #[serde(skip_serializing)]
     pub id: i32,
     #[serde(skip_serializing)]
-    pub coin_id: String,
+    pub token_id: String,
     #[serde(serialize_with = "serialize_price_bigdecimal")]
     pub open_price: BigDecimal,
     #[serde(serialize_with = "serialize_price_bigdecimal")]
@@ -102,8 +103,8 @@ pub struct Balance {
     #[serde(skip_serializing)]
     pub id: i32,
     #[serde(skip_serializing)]
-    pub coin_id: String,
-    pub account: String,
+    pub token_id: String,
+    pub account_id: String,
     pub amount: BigDecimal,
 }
 
@@ -128,7 +129,7 @@ pub struct AccountSession {
 pub struct Thread {
     pub id: i32,
     #[serde(skip_serializing)]
-    pub coin_id: String,
+    pub token_id: String,
     pub author_id: String,
     pub content: String,
     #[schema(value_type = String, example = "2023-06-01T12:00:00Z")]
@@ -142,32 +143,32 @@ pub struct Thread {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
-pub struct CoinReplyCount {
+pub struct TokenReplyCount {
     #[serde(skip_serializing)]
-    pub coin_id: String,
+    pub token_id: String,
     pub reply_count: i32,
 }
 
 // Wrapper structs
 #[derive(Debug, Deserialize)]
-pub struct CoinWrapper {
-    record: Coin,
+pub struct TokenWrapper {
+    record: Token,
     #[serde(skip_serializing)]
-    coin_id: String,
+    token_id: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct CurveWrapper {
     record: Curve,
     #[serde(skip_serializing)]
-    coin_id: String,
+    token_id: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct SwapWrapper {
     record: Swap,
     #[serde(skip_serializing)]
-    coin_id: String,
+    token_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -176,7 +177,7 @@ pub struct BalanceWrapper {
     #[serde(rename(serialize = "balance", deserialize = "record"))]
     pub balance: Balance,
     #[serde(skip_serializing)]
-    pub coin_id: String,
+    pub token_id: String,
 }
 
 impl BalanceWrapper {
@@ -195,7 +196,7 @@ pub struct ThreadWrapper {
     #[serde(rename(serialize = "thread", deserialize = "record"))]
     pub record: Thread,
     #[serde(skip_serializing)]
-    pub coin_id: String,
+    pub token_id: String,
 }
 
 impl ThreadWrapper {
@@ -204,10 +205,10 @@ impl ThreadWrapper {
     }
 }
 #[derive(Debug, Deserialize)]
-pub struct CoinReplyCountWrapper {
-    record: CoinReplyCount,
+pub struct TokenReplyCountWrapper {
+    record: TokenReplyCount,
     #[serde(skip_serializing)]
-    coin_id: String,
+    token_id: String,
 }
 
 // ChartWrapper implementation
@@ -218,7 +219,7 @@ pub struct ChartWrapper {
     #[serde(skip_serializing)]
     pub chart_type: String,
     #[serde(skip_serializing)]
-    pub coin_id: String,
+    pub token_id: String,
 }
 
 impl ChartWrapper {
@@ -243,7 +244,7 @@ pub trait FromValue: Sized {
     fn from_value(value: Value) -> Result<Self>;
 }
 // Implement FromValue for all types
-impl_from_value!(Coin, CoinWrapper);
+impl_from_value!(Token, TokenWrapper);
 impl_from_value!(Curve, CurveWrapper);
 impl_from_value!(Swap, SwapWrapper);
-impl_from_value!(CoinReplyCount, CoinReplyCountWrapper);
+impl_from_value!(TokenReplyCount, TokenReplyCountWrapper);
