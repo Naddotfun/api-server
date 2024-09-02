@@ -26,7 +26,6 @@ pub struct TokenResponse {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct TokenMessage {
-    #[serde(skip)]
     // pub message_type: SendMessageType,
     // pub order_type: OrderType,
     // pub new_token: Option<NewTokenMessage>,

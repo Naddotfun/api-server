@@ -131,14 +131,8 @@ pub async fn handle_token_subscribe(
     let token_data = token_page_controller
         .get_token_message(&token_id, chart_type.clone())
         .await?;
-    // info!("Token data is :{:?}", token_data);
-    let message = TokenMessage {
-        // message_type: SendMessageType::ALL,
-        // new_token,
-        // new_buy,
-        // new_sell,
-        token: token_data,
-    };
+    // info!("Token data is: {:?}", token_data);
+    let message = TokenMessage { token: token_data };
     let message_json = serde_json::to_value(message).context("Failed to serialize token")?;
     send_success_response(&tx, request.method(), json!(message_json)).await?;
 

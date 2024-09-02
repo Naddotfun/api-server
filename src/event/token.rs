@@ -115,31 +115,21 @@ impl TokenEventProducer {
         &self,
         notification: Result<PgNotification, sqlx::Error>,
     ) -> Result<()> {
+        info!("Handling notification");
         let notification = notification.context("Failed to get notification")?;
-
-        if self.total_channels.load(Ordering::Relaxed) == 0 {
-            return Ok(());
-        }
 
         let payload: Value = serde_json::from_str(&notification.payload())
             .context("Failed to parse notification payload")?;
-
         let token_id = payload["token_id"].as_str().unwrap_or("").to_string();
-
-        let event = self.parse_event(notification.channel(), payload)?;
         let senders = self.token_senders.read().await;
-        let should_process = match &event {
-            TokenEventCapture::Token(_) | TokenEventCapture::Swap(_) => true,
-            _ => senders.contains_key(&token_id),
-        };
-
-        if !should_process {
+        if !senders.contains_key(&token_id) {
             debug!(
-                "Skipping event for token_id: {}, no subscribers or non-relevant event type",
+                "토큰 ID: {}에 대한 구독자가 없습니다. 이벤트를 건너뜁니다.",
                 token_id
             );
             return Ok(());
         }
+        let event = self.parse_event(notification.channel(), payload)?;
 
         let message = self.handle_event(event).await?;
         // info!("Sending message for token_id: {:?}\n", message);
@@ -202,7 +192,6 @@ impl TokenEventProducer {
     }
 
     async fn handle_balance_event(&self, balance: BalanceWrapper) -> Result<TokenMessage> {
-        info!("Handling balance event: {:?}", balance);
         Ok(TokenMessage::from_balance(balance))
     }
 
@@ -216,36 +205,28 @@ impl TokenEventProducer {
 
     async fn send_message(&self, message: TokenMessage) -> Result<()> {
         let senders = self.token_senders.read().await;
-        if senders.is_empty() {
-            return Ok(());
-        }
-        for (_, sender) in senders.iter() {
-            if let Err(e) = sender.0.send(message.clone()) {
-                error!("Failed to send ALL message: {:?}", e);
-            }
+        //senders 에서 token_id 에 해당하는 sender 를 찾아서 보낸다
+        /*
+
+                #[derive(Clone)]
+        pub struct TokenEventProducer {
+            db: Arc<PostgresDatabase>,
+            token_senders: Arc<RwLock<HashMap<String, (Sender<TokenMessage>, usize)>>>,
+            total_channels: Arc<AtomicUsize>,
         }
 
-        // match message.message_type {
-        //     SendMessageType::ALL => {
-        //         for (_, sender) in senders.iter() {
-        //             if let Err(e) = sender.0.send(message.clone()) {
-        //                 error!("Failed to send ALL message: {:?}", e);
-        //             }
-        //         }
-        //     }
-        //     SendMessageType::Regular => {
-        //         if let Some(sender) = senders.get(&message.token.id) {
-        //             if let Err(e) = sender.0.send(message.clone()) {
-        //                 error!(
-        //                     "Failed to send Regular message for token_id {}: {:?}",
-        //                     message.token.id, e
-        //                 );
-        //             }
-        //         } else {
-        //             warn!("No sender found for token_id: {}", message.token.id);
-        //         }
-        //     }
-        // }
+                 */
+        let token_id = message.token.id.clone();
+        match senders.get(&token_id) {
+            Some(sender) => {
+                if let Err(e) = sender.0.send(message) {
+                    error!("토큰 ID: {}에 대한 메시지 전송 실패: {:?}", token_id, e);
+                }
+            }
+            None => {
+                warn!("토큰 ID: {}에 대한 sender를 찾을 수 없습니다", token_id);
+            }
+        }
 
         Ok(())
     }
